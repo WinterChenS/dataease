@@ -3,7 +3,7 @@ package io.dataease.controller.panel.server;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import io.dataease.auth.filter.F2CLinkFilter;
-import io.dataease.base.domain.PanelLink;
+import io.dataease.plugins.common.base.domain.PanelLink;
 import io.dataease.controller.panel.api.LinkApi;
 import io.dataease.controller.request.chart.ChartExtRequest;
 import io.dataease.controller.request.panel.link.*;
@@ -65,9 +65,14 @@ public class LinkServer implements LinkApi {
         link = URLDecoder.decode(link, "UTF-8");
         String json = panelLinkService.decryptParam(link);
 
+        String user = request.getUser();
+        user = URLDecoder.decode(user, "UTF-8");
+        user = panelLinkService.decryptParam(user);
+
         ValidateDto dto = new ValidateDto();
+        dto.setUserId(user);
         String resourceId = json;
-        PanelLink one = panelLinkService.findOne(resourceId, request.getUser());
+        PanelLink one = panelLinkService.findOne(resourceId, Long.valueOf(user));
         dto.setResourceId(resourceId);
         if (ObjectUtils.isEmpty(one)) {
             dto.setValid(false);

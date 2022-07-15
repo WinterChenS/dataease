@@ -7,13 +7,12 @@
       :style="content_class"
     >
       <span :style="label_class">
-        <p v-for="item in chart.data.series" :key="item.name" :style="label_content_class">
-          {{ item.data[0] }}
+        <p :style="label_content_class">
+          {{ result }}
         </p>
       </span>
       <span v-if="dimensionShow" :style="label_space">
         <p :style="label_class">
-          <!--        {{ chart.data.x[0] }}-->
           {{ chart.data.series[0].name }}
         </p>
       </span>
@@ -24,6 +23,7 @@
 <script>
 import { hexColorToRGBA } from '../../chart/util'
 import eventBus from '@/components/canvas/utils/eventBus'
+import { formatterItem, valueFormatter } from '@/views/chart/chart/formatter'
 
 export default {
   name: 'LabelNormal',
@@ -77,7 +77,8 @@ export default {
         background: hexColorToRGBA('#ffffff', 0)
       },
       title_show: true,
-      borderRadius: '0px'
+      borderRadius: '0px',
+      result: ''
     }
   },
   computed: {
@@ -98,14 +99,16 @@ export default {
     this.init()
     this.calcHeight()
     // 监听元素变动事件
-    eventBus.$on('resizing', (componentId) => {
-      this.chartResize()
-    })
+    eventBus.$on('resizing', this.chartResize)
+  },
+  beforeDestroy() {
+    eventBus.$off('resizing', this.chartResize)
   },
   methods: {
     init() {
       const that = this
       this.initStyle()
+      this.resultFormat()
       window.onresize = function() {
         that.calcHeight()
       }
@@ -136,7 +139,8 @@ export default {
         const customAttr = JSON.parse(this.chart.customAttr)
         if (customAttr.color) {
           this.label_class.color = customAttr.color.dimensionColor
-          this.label_content_class.color = customAttr.color.quotaColor
+          // color threshold
+          this.colorThreshold(customAttr.color.quotaColor)
         }
         if (customAttr.size) {
           this.dimensionShow = customAttr.size.dimensionShow
@@ -168,6 +172,76 @@ export default {
     chartResize() {
       // 指定图表的配置项和数据
       this.calcHeight()
+    },
+
+    colorThreshold(valueColor) {
+      if (this.chart.senior) {
+        const senior = JSON.parse(this.chart.senior)
+        if (senior.threshold && senior.threshold.labelThreshold && senior.threshold.labelThreshold.length > 0) {
+          const value = parseFloat(this.chart.data.series[0].data[0])
+          for (let i = 0; i < senior.threshold.labelThreshold.length; i++) {
+            let flag = false
+            const t = senior.threshold.labelThreshold[i]
+            const tv = parseFloat(t.value)
+            if (t.term === 'eq') {
+              if (value === tv) {
+                this.label_content_class.color = t.color
+                flag = true
+              }
+            } else if (t.term === 'not_eq') {
+              if (value !== tv) {
+                this.label_content_class.color = t.color
+                flag = true
+              }
+            } else if (t.term === 'lt') {
+              if (value < tv) {
+                this.label_content_class.color = t.color
+                flag = true
+              }
+            } else if (t.term === 'gt') {
+              if (value > tv) {
+                this.label_content_class.color = t.color
+                flag = true
+              }
+            } else if (t.term === 'le') {
+              if (value <= tv) {
+                this.label_content_class.color = t.color
+                flag = true
+              }
+            } else if (t.term === 'ge') {
+              if (value >= tv) {
+                this.label_content_class.color = t.color
+                flag = true
+              }
+            }
+            if (flag) {
+              break
+            } else if (i === senior.threshold.labelThreshold.length - 1) {
+              this.label_content_class.color = valueColor
+            }
+          }
+        } else {
+          this.label_content_class.color = valueColor
+        }
+      }
+    },
+
+    resultFormat() {
+      const value = this.chart.data.series[0].data[0]
+      let yAxis = []
+      try {
+        yAxis = JSON.parse(this.chart.yaxis)
+      } catch (err) {
+        yAxis = JSON.parse(JSON.stringify(this.chart.yaxis))
+      }
+      const f = yAxis[0]
+      if (f && f.formatterCfg) {
+        const v = valueFormatter(value, f.formatterCfg)
+        this.result = v.includes('NaN') ? value : v
+      } else {
+        const v = valueFormatter(value, formatterItem)
+        this.result = v.includes('NaN') ? value : v
+      }
     }
   }
 }

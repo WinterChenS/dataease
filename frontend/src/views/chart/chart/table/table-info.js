@@ -1,5 +1,7 @@
 import { TableSheet, S2Event, PivotSheet } from '@antv/s2'
 import { getCustomTheme, getSize } from '@/views/chart/chart/common/common_table'
+import { DEFAULT_TOTAL } from '@/views/chart/chart/chart'
+import { formatterItem, valueFormatter } from '@/views/chart/chart/formatter'
 
 export function baseTableInfo(s2, container, chart, action, tableData) {
   const containerDom = document.getElementById(container)
@@ -48,20 +50,54 @@ export function baseTableInfo(s2, container, chart, action, tableData) {
             name: drillField.name
           })
         } else {
+          const f = getCurrentField(chart.xaxis, ele)
           columns.push(ele.dataeaseName)
           meta.push({
             field: ele.dataeaseName,
-            name: ele.name
+            name: ele.name,
+            formatter: function(value) {
+              if (!f) {
+                return value
+              }
+              if (f.groupType === 'd') {
+                return value
+              } else {
+                if (f.formatterCfg) {
+                  const v = valueFormatter(value, f.formatterCfg)
+                  return v.includes('NaN') ? value : v
+                } else {
+                  const v = valueFormatter(value, formatterItem)
+                  return v.includes('NaN') ? value : v
+                }
+              }
+            }
           })
         }
       }
     })
   } else {
     fields.forEach(ele => {
+      const f = getCurrentField(chart.xaxis, ele)
       columns.push(ele.dataeaseName)
       meta.push({
         field: ele.dataeaseName,
-        name: ele.name
+        name: ele.name,
+        formatter: function(value) {
+          if (!f) {
+            return value
+          }
+          if (f.groupType === 'd') {
+            return value
+          } else {
+            if (f.formatterCfg) {
+              const v = valueFormatter(value, f.formatterCfg)
+              return v.includes('NaN') ? value : v
+            } else {
+              const v = valueFormatter(value, formatterItem)
+              return v.includes('NaN') ? value : v
+            }
+          }
+        }
       })
     })
   }
@@ -145,20 +181,42 @@ export function baseTableNormal(s2, container, chart, action, tableData) {
             name: drillField.name
           })
         } else {
+          const f = getCurrentField(chart.yaxis, ele)
           columns.push(ele.dataeaseName)
           meta.push({
             field: ele.dataeaseName,
-            name: ele.name
+            name: ele.name,
+            formatter: function(value) {
+              if (!f) {
+                return value
+              }
+              if (f.formatterCfg) {
+                return valueFormatter(value, f.formatterCfg)
+              } else {
+                return valueFormatter(value, formatterItem)
+              }
+            }
           })
         }
       }
     })
   } else {
     fields.forEach(ele => {
+      const f = getCurrentField(chart.yaxis, ele)
       columns.push(ele.dataeaseName)
       meta.push({
         field: ele.dataeaseName,
-        name: ele.name
+        name: ele.name,
+        formatter: function(value) {
+          if (!f) {
+            return value
+          }
+          if (f.formatterCfg) {
+            return valueFormatter(value, f.formatterCfg)
+          } else {
+            return valueFormatter(value, formatterItem)
+          }
+        }
       })
     })
   }
@@ -252,20 +310,42 @@ export function baseTablePivot(s2, container, chart, action, tableData) {
             name: drillField.name
           })
         } else {
+          const f = getCurrentField(chart.yaxis, ele)
           columns.push(ele.dataeaseName)
           meta.push({
             field: ele.dataeaseName,
-            name: ele.name
+            name: ele.name,
+            formatter: function(value) {
+              if (!f) {
+                return value
+              }
+              if (f.formatterCfg) {
+                return valueFormatter(value, f.formatterCfg)
+              } else {
+                return valueFormatter(value, formatterItem)
+              }
+            }
           })
         }
       }
     })
   } else {
     fields.forEach(ele => {
+      const f = getCurrentField(chart.yaxis, ele)
       columns.push(ele.dataeaseName)
       meta.push({
         field: ele.dataeaseName,
-        name: ele.name
+        name: ele.name,
+        formatter: function(value) {
+          if (!f) {
+            return value
+          }
+          if (f.formatterCfg) {
+            return valueFormatter(value, f.formatterCfg)
+          } else {
+            return valueFormatter(value, formatterItem)
+          }
+        }
       })
     })
   }
@@ -281,11 +361,31 @@ export function baseTablePivot(s2, container, chart, action, tableData) {
     data: tableData
   }
 
+  // total config
+  let totalCfg = {}
+  const chartObj = JSON.parse(JSON.stringify(chart))
+  if (chartObj.customAttr) {
+    let customAttr = null
+    if (Object.prototype.toString.call(chartObj.customAttr) === '[object Object]') {
+      customAttr = JSON.parse(JSON.stringify(chartObj.customAttr))
+    } else {
+      customAttr = JSON.parse(chartObj.customAttr)
+    }
+    if (customAttr.totalCfg) {
+      totalCfg = customAttr.totalCfg
+    } else {
+      totalCfg = JSON.parse(JSON.stringify(DEFAULT_TOTAL))
+    }
+  }
+  totalCfg.row.subTotalsDimensions = r
+  totalCfg.col.subTotalsDimensions = c
+
   // options
   const s2Options = {
     width: containerDom.offsetWidth,
     height: containerDom.offsetHeight,
-    style: getSize(chart)
+    style: getSize(chart),
+    totals: totalCfg
   }
 
   // 开始渲染
@@ -302,4 +402,25 @@ export function baseTablePivot(s2, container, chart, action, tableData) {
   s2.setThemeCfg({ theme: customTheme })
 
   return s2
+}
+
+function getCurrentField(valueFieldList, field) {
+  let list = []
+  let res = null
+  try {
+    list = JSON.parse(valueFieldList)
+  } catch (err) {
+    list = JSON.parse(JSON.stringify(valueFieldList))
+  }
+  if (list) {
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i]
+      if (field.dataeaseName === f.dataeaseName) {
+        res = f
+        break
+      }
+    }
+  }
+
+  return res
 }

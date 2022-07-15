@@ -1,19 +1,20 @@
 package io.dataease.service.panel;
-
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
-import io.dataease.base.domain.PanelGroupWithBLOBs;
-import io.dataease.base.domain.PanelView;
-import io.dataease.base.domain.PanelViewExample;
-import io.dataease.base.mapper.PanelViewMapper;
-import io.dataease.base.mapper.ext.ExtPanelViewMapper;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import io.dataease.ext.ExtChartViewMapper;
+import io.dataease.ext.ExtPanelGroupMapper;
+import io.dataease.ext.ExtPanelViewMapper;
 import io.dataease.commons.utils.AuthUtils;
 import io.dataease.commons.utils.BeanUtils;
 import io.dataease.dto.panel.PanelViewDto;
 import io.dataease.dto.panel.PanelViewTableDTO;
 import io.dataease.dto.panel.po.PanelViewInsertDTO;
 import io.dataease.dto.panel.po.PanelViewPo;
+import io.dataease.plugins.common.base.domain.PanelGroupWithBLOBs;
+import io.dataease.plugins.common.base.domain.PanelView;
+import io.dataease.plugins.common.base.domain.PanelViewExample;
+import io.dataease.plugins.common.base.mapper.PanelViewMapper;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -38,6 +39,11 @@ public class PanelViewService {
 
     @Resource
     private PanelViewMapper panelViewMapper;
+
+    @Resource
+    private ExtChartViewMapper extChartViewMapper;
+
+    private ExtPanelGroupMapper extPanelGroupMapper;
 
     private final static String SCENE_TYPE = "scene";
 
@@ -80,43 +86,65 @@ public class PanelViewService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Boolean syncPanelViews(PanelGroupWithBLOBs panelGroup) {
+    public List<String> syncPanelViews(PanelGroupWithBLOBs panelGroup) {
+        List<String> viewIds = new ArrayList<>();
         Boolean mobileLayout = null;
         String panelId = panelGroup.getId();
         Assert.notNull(panelId, "panelId cannot be null");
         String panelData = panelGroup.getPanelData();
         if (StringUtils.isNotEmpty(panelData)) {
             mobileLayout = false;
-            JSONArray dataArray = JSON.parseArray(panelData);
+            JsonArray dataArray = JsonParser.parseString(panelData).getAsJsonArray();
+
             List<PanelViewInsertDTO> panelViewInsertDTOList = new ArrayList<>();
             for (int i = 0; i < dataArray.size(); i++) {
-                JSONObject jsonObject = dataArray.getJSONObject(i);
-                if ("view".equals(jsonObject.getString("type"))) {
-                    panelViewInsertDTOList.add(new PanelViewInsertDTO(jsonObject.getJSONObject("propValue").getString("viewId"), panelId));
+                JsonObject jsonObject = dataArray.get(i).getAsJsonObject();
+                if (jsonObject.get("type")!=null && "view".equals(jsonObject.get("type").getAsString())) {
+                    panelViewInsertDTOList.add(new PanelViewInsertDTO(jsonObject.get("propValue").getAsJsonObject().get("viewId").getAsString(), panelId));
                 }
                 // 选项卡内部视图
-                if ("de-tabs".equals(jsonObject.getString("type"))) {
-                    JSONObject options = jsonObject.getJSONObject("options");
+                if (jsonObject.get("type")!=null && "de-tabs".equals(jsonObject.get("type").getAsString())) {
+                    JsonObject options = jsonObject.getAsJsonObject("options");
                     if (options != null) {
-                        JSONArray tabList = options.getJSONArray("tabList");
-                        if (CollectionUtils.isNotEmpty(tabList)) {
+                        JsonArray tabList = options.getAsJsonArray("tabList");
+                        if (tabList != null && tabList.size() > 0) {
                             for (int y = 0; y < tabList.size(); y++) {
-                                if(tabList.getJSONObject(y).getString("content").indexOf("viewId")>-1){
-                                    panelViewInsertDTOList.add(new PanelViewInsertDTO(tabList.getJSONObject(y).getJSONObject("content").getJSONObject("propValue").getString("viewId"), panelId,"tab"));
+                                if (tabList.get(y).getAsJsonObject().get("content").toString().indexOf("viewId") > -1) {
+                                    panelViewInsertDTOList.add(new PanelViewInsertDTO(tabList.get(y).getAsJsonObject().getAsJsonObject("content").getAsJsonObject("propValue").get("viewId").getAsString(), panelId, "tab"));
                                 }
                             }
                         }
                     }
                 }
-                if (jsonObject.getBoolean("mobileSelected") != null && jsonObject.getBoolean("mobileSelected")) {
+                if (jsonObject.get("mobileSelected") != null && jsonObject.get("mobileSelected").getAsBoolean()) {
                     mobileLayout = true;
                 }
             }
             extPanelViewMapper.deleteWithPanelId(panelId);
             if (CollectionUtils.isNotEmpty(panelViewInsertDTOList)) {
                 extPanelViewMapper.savePanelView(panelViewInsertDTOList);
+                //将视图从cache表中更新到正式表中
+                viewIds = panelViewInsertDTOList.stream().map(panelView -> panelView.getChartViewId()).collect(Collectors.toList());
+            }
+            extChartViewMapper.deleteCacheWithPanel(viewIds, panelId);
+            extChartViewMapper.deleteNoUseView(viewIds, panelId);
+        }
+        panelGroup.setMobileLayout(mobileLayout);
+        return viewIds;
+    }
+
+    public Boolean havaMobileLayout(String panelData){
+        Boolean mobileLayout = false;
+        if (StringUtils.isNotEmpty(panelData)) {
+            JsonArray dataArray = JsonParser.parseString(panelData).getAsJsonArray();
+            for (int i = 0; i < dataArray.size(); i++) {
+                JsonObject jsonObject = dataArray.get(i).getAsJsonObject();
+                if (jsonObject.get("mobileSelected") != null && jsonObject.get("mobileSelected").getAsBoolean()) {
+                    mobileLayout = true;
+                }
             }
         }
+
         return mobileLayout;
     }
 
@@ -124,9 +152,20 @@ public class PanelViewService {
         return extPanelViewMapper.getPanelViewDetails(panelId);
     }
 
-    public List<PanelView> findPanelViews(String copyId){
+    public List<PanelView> findPanelViews(String copyId) {
         PanelViewExample panelViewExample = new PanelViewExample();
         panelViewExample.createCriteria().andCopyIdEqualTo(copyId);
         return panelViewMapper.selectByExample(panelViewExample);
+    }
+
+    public PanelView findByViewId(String viewId) {
+        PanelViewExample panelViewExample = new PanelViewExample();
+        panelViewExample.createCriteria().andChartViewIdEqualTo(viewId);
+        List<PanelView> result = panelViewMapper.selectByExample(panelViewExample);
+        if (CollectionUtils.isNotEmpty(result)) {
+            return result.get(0);
+        } else {
+            return null;
+        }
     }
 }

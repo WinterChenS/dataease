@@ -3,26 +3,27 @@ package io.dataease.service.panel;
 import io.dataease.auth.config.RsaProperties;
 import io.dataease.auth.util.JWTUtils;
 import io.dataease.auth.util.RsaUtil;
-import io.dataease.base.domain.*;
-import io.dataease.base.mapper.PanelGroupMapper;
-import io.dataease.base.mapper.PanelLinkMapper;
-import io.dataease.base.mapper.PanelLinkMappingMapper;
-import io.dataease.base.mapper.ext.ExtPanelLinkMapper;
+import io.dataease.commons.constants.SysLogConstants;
 import io.dataease.commons.utils.AuthUtils;
 import io.dataease.commons.utils.CodingUtil;
+import io.dataease.commons.utils.DeLogUtils;
 import io.dataease.commons.utils.ServletUtils;
 import io.dataease.controller.request.panel.link.EnablePwdRequest;
 import io.dataease.controller.request.panel.link.LinkRequest;
 import io.dataease.controller.request.panel.link.OverTimeRequest;
 import io.dataease.controller.request.panel.link.PasswordRequest;
 import io.dataease.dto.panel.link.GenerateDto;
+import io.dataease.plugins.common.base.domain.*;
+import io.dataease.plugins.common.base.mapper.PanelGroupMapper;
+import io.dataease.plugins.common.base.mapper.PanelLinkMapper;
+import io.dataease.plugins.common.base.mapper.PanelLinkMappingMapper;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import io.dataease.ext.ExtPanelLinkMapper;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -35,7 +36,7 @@ public class PanelLinkService {
     private static final String USERPARAM = "&user=";
     private static final String SHORT_URL_PREFIX = "/link/";
 
-    @Value("${server.servlet.context-path}")
+    @Value("${server.servlet.context-path:#{null}}")
     private String contextPath;
 
     @Resource
@@ -60,6 +61,13 @@ public class PanelLinkService {
         PanelLinkMapping mapping = new PanelLinkMapping();
         mapping.setUuid(CodingUtil.shortUuid());
         panelLinkMappingMapper.updateByExampleSelective(mapping, example);
+        PanelGroupWithBLOBs panel = panelGroupMapper.selectByPrimaryKey(request.getResourceId());
+
+        SysLogConstants.OPERATE_TYPE operateType = SysLogConstants.OPERATE_TYPE.CREATELINK;
+        if (!request.isValid()) {
+            operateType = SysLogConstants.OPERATE_TYPE.DELETELINK;
+        }
+        DeLogUtils.save(operateType, SysLogConstants.SOURCE_TYPE.PANEL, panel.getId(), panel.getPid(), null, null) ;
     }
 
     private PanelLinkExample example(String panelLinkId, Long userId) {
@@ -73,6 +81,8 @@ public class PanelLinkService {
         po.setResourceId(request.getResourceId());
         po.setEnablePwd(request.isEnablePwd());
         mapper.updateByExampleSelective(po, example(request.getResourceId(), AuthUtils.getUser().getUserId()));
+        PanelGroupWithBLOBs panel = panelGroupMapper.selectByPrimaryKey(request.getResourceId());
+        DeLogUtils.save(SysLogConstants.OPERATE_TYPE.MODIFYLINK, SysLogConstants.SOURCE_TYPE.PANEL, panel.getId(), panel.getPid(), null, null) ;
     }
 
     public void password(PasswordRequest request) {
@@ -80,11 +90,17 @@ public class PanelLinkService {
         po.setResourceId(request.getResourceId());
         po.setPwd(request.getPassword());
         mapper.updateByExampleSelective(po, example(request.getResourceId(), AuthUtils.getUser().getUserId()));
+
+
+        PanelGroupWithBLOBs panel = panelGroupMapper.selectByPrimaryKey(request.getResourceId());
+        DeLogUtils.save(SysLogConstants.OPERATE_TYPE.MODIFYLINK, SysLogConstants.SOURCE_TYPE.PANEL, panel.getId(), panel.getPid(), null, null) ;
     }
 
     public void overTime(OverTimeRequest request) {
         request.setUserId(AuthUtils.getUser().getUserId());
         extPanelLinkMapper.updateOverTime(request);
+        PanelGroupWithBLOBs panel = panelGroupMapper.selectByPrimaryKey(request.getResourceId());
+        DeLogUtils.save(SysLogConstants.OPERATE_TYPE.MODIFYLINK, SysLogConstants.SOURCE_TYPE.PANEL, panel.getId(), panel.getPid(), null, null) ;
     }
 
     private PanelLink findOne(String resourceId) {
@@ -136,6 +152,10 @@ public class PanelLinkService {
         PanelLinkExample example = new PanelLinkExample();
         example.createCriteria().andResourceIdEqualTo(resourceId);
         mapper.deleteByExample(example);
+
+        PanelLinkMappingExample mappingExample = new PanelLinkMappingExample();
+        mappingExample.createCriteria().andResourceIdEqualTo(resourceId);
+        panelLinkMappingMapper.deleteByExample(mappingExample);
     }
 
     public String decryptParam(String text) throws Exception {
@@ -155,7 +175,7 @@ public class PanelLinkService {
     private String buildLinkParam(PanelLink link) {
         String linkParam = encrypt(link.getResourceId());
         if (link.getUserId() != null) {
-            linkParam = linkParam + USERPARAM + link.getUserId().toString();
+            linkParam = linkParam + USERPARAM + encrypt(link.getUserId().toString());
         }
         return linkParam;
     }

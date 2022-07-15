@@ -1,12 +1,11 @@
 package io.dataease.controller.request.dataset;
 
-import io.dataease.base.domain.DatasetTable;
-import io.dataease.dto.datasource.TableField;
 import io.dataease.dto.dataset.ExcelSheetData;
+import io.dataease.plugins.common.base.domain.DatasetTable;
+import io.dataease.plugins.common.dto.datasource.TableField;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Getter;
 import lombok.Setter;
-
 import java.util.List;
 
 /**
@@ -38,4 +37,5 @@ public class DataSetTableRequest extends DatasetTable {
     private List<ExcelSheetData> sheets;
     @ApiModelProperty("是否合并sheet")
     private boolean mergeSheet = false;
+    private boolean previewForTask = false;
 }

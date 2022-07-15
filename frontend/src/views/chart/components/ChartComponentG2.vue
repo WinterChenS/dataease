@@ -50,6 +50,11 @@ export default {
       type: Number,
       required: false,
       default: 0
+    },
+    scale: {
+      type: Number,
+      required: false,
+      default: 1
     }
   },
   data() {
@@ -74,10 +79,13 @@ export default {
         textAlign: 'left',
         fontStyle: 'normal',
         fontWeight: 'normal',
-        background: hexColorToRGBA('#ffffff', 0)
+        background: ''
       },
       title_show: true,
-      antVRenderStatus: false
+      antVRenderStatus: false,
+      linkageActiveParam: null,
+      linkageActiveHistory: false
+
     }
   },
 
@@ -110,6 +118,43 @@ export default {
     this.preDraw()
   },
   methods: {
+    reDrawView() {
+      this.linkageActiveHistory = false
+      this.myChart.render()
+    },
+    linkageActivePre() {
+      if (this.linkageActiveHistory) {
+        this.reDrawView()
+      }
+      this.$nextTick(() => {
+        this.linkageActive()
+      })
+    },
+    linkageActive() {
+      this.linkageActiveHistory = true
+      this.myChart.setState('active', (param) => {
+        if (Array.isArray(param)) {
+          return false
+        } else {
+          if (this.checkSelected(param)) {
+            return true
+          }
+        }
+      })
+      this.myChart.setState('inactive', (param) => {
+        if (Array.isArray(param)) {
+          return false
+        } else {
+          if (!this.checkSelected(param)) {
+            return true
+          }
+        }
+      })
+    },
+    checkSelected(param) {
+      return (this.linkageActiveParam.name.indexOf(param.name) > -1) &&
+        (this.linkageActiveParam.category === param.category)
+    },
     preDraw() {
       this.initTitle()
       this.calcHeightDelay()
@@ -153,7 +198,7 @@ export default {
       } else if (chart.type === 'radar') {
         this.myChart = baseRadarOptionAntV(this.myChart, this.chartId, chart, this.antVAction)
       } else if (chart.type === 'gauge') {
-        this.myChart = baseGaugeOptionAntV(this.myChart, this.chartId, chart, this.antVAction)
+        this.myChart = baseGaugeOptionAntV(this.myChart, this.chartId, chart, this.antVAction, this.scale)
       } else if (chart.type === 'pie') {
         this.myChart = basePieOptionAntV(this.myChart, this.chartId, chart, this.antVAction)
       } else if (chart.type === 'pie-rose') {
@@ -175,22 +220,28 @@ export default {
         }
       }
 
-      if (this.myChart && this.searchCount > 0) {
+      if (this.myChart && chart.type !== 'liquid' && this.searchCount > 0) {
         this.myChart.options.animation = false
       }
 
       if (this.antVRenderStatus) {
         this.myChart.render()
+        if (this.linkageActiveHistory) {
+          this.linkageActive()
+        }
       }
       this.setBackGroundBorder()
     },
 
     antVAction(param) {
-      console.log(param)
       if (this.chart.type === 'treemap') {
         this.pointParam = param.data.data
       } else {
         this.pointParam = param.data
+      }
+      this.linkageActiveParam = {
+        category: this.pointParam.data.category ? this.pointParam.data.category : 'NO_DATA',
+        name: this.pointParam.data.name ? this.pointParam.data.name : 'NO_DATA'
       }
       if (this.trackMenu.length < 2) { // 只有一个事件直接调用
         this.trackClick(this.trackMenu[0])
@@ -232,11 +283,13 @@ export default {
         dimensionList: this.pointParam.data.dimensionList,
         quotaList: this.pointParam.data.quotaList
       }
+
       switch (trackAction) {
         case 'drill':
           this.$emit('onChartClick', this.pointParam)
           break
         case 'linkage':
+          this.linkageActivePre()
           this.$store.commit('addViewTrackFilter', linkageParam)
           break
         case 'jump':

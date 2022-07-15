@@ -10,9 +10,13 @@
       <el-table-column prop="name" :label="$t('commons.name')">
         <template :id="scope.row.storeId" slot-scope="scope">
           <div class="start-item">
-            <div class="filter-db-row star-item-content" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" @click="showPanel(scope.row)">
-              <svg-icon icon-class="panel" class="ds-icon-scene" />
-              <span> {{ scope.row.name }}</span>
+            <div
+              class="filter-db-row star-item-content"
+              style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+              @click="showPanel(scope.row)"
+            >
+              <svg-icon :icon-class="'panel-'+scope.row.status" class="ds-icon-scene" />
+              <span :class="scope.row.status"> {{ scope.row.name }}</span>
             </div>
             <div class="star-item-close">
               <i class="el-icon-delete " @click="remove(scope.row)" />
@@ -29,6 +33,7 @@ import { deleteEnshrine, enshrineList } from '@/api/panel/enshrine'
 import { uuid } from 'vue-uuid'
 import { initPanelData } from '@/api/panel/panel'
 import bus from '@/utils/bus'
+
 export default {
   name: 'Enshrine',
   data() {
@@ -44,6 +49,9 @@ export default {
   created() {
     bus.$on('panle_start_list_refresh', this.refreshStarts)
     this.initData()
+  },
+  beforeDestroy() {
+    bus.$off('panle_start_list_refresh', this.refreshStarts)
   },
   methods: {
     showPanel(row) {
@@ -62,6 +70,8 @@ export default {
     },
     remove(row) {
       deleteEnshrine(row.panelGroupId).then(res => {
+        const msg = this.$t('commons.cancel') + this.$t('panel.store') + this.$t('commons.success')
+        this.$success(msg)
         this.initData()
         this.panelInfo && this.panelInfo.id && row.panelGroupId === this.panelInfo.id && this.setMainNull()
       })
@@ -83,24 +93,35 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.start-item {
+  .start-item {
     width: 100%;
     height: 25px;
     margin: 0 0 0 10px;
-}
-.star-item-content {
+  }
+
+  .star-item-content {
     width: calc(100% - 60px);
     position: absolute;
-}
-.star-item-close {
+  }
+
+  .star-item-close {
     width: 25px;
     right: 5px;
     position: absolute;
     display: none;
-}
-.start-item:hover {
+  }
+
+  .start-item:hover {
     .star-item-close {
-        display: block;
+      display: block;
     }
-}
+  }
+
+  .unpublished {
+    color: #b2b2b2
+  }
+
+  .publish {
+  }
+
 </style>

@@ -1,18 +1,21 @@
 package io.dataease.controller.dataset;
 
 import com.github.xiaoymin.knife4j.annotations.ApiSupport;
+import io.dataease.auth.annotation.DeLog;
 import io.dataease.auth.annotation.DePermission;
 import io.dataease.auth.annotation.DePermissions;
-import io.dataease.base.domain.DatasetTable;
-import io.dataease.base.domain.DatasetTableField;
-import io.dataease.base.domain.DatasetTableIncrementalConfig;
 import io.dataease.commons.constants.DePermissionType;
 import io.dataease.commons.constants.ResourceAuthLevel;
+import io.dataease.commons.constants.SysLogConstants;
 import io.dataease.controller.request.dataset.DataSetTableRequest;
 import io.dataease.controller.response.DataSetDetail;
 import io.dataease.dto.dataset.DataSetTableDTO;
 import io.dataease.dto.dataset.ExcelFileData;
-import io.dataease.dto.datasource.TableField;
+import io.dataease.dto.dataset.SqlVariableDetails;
+import io.dataease.plugins.common.base.domain.DatasetTable;
+import io.dataease.plugins.common.base.domain.DatasetTableField;
+import io.dataease.plugins.common.base.domain.DatasetTableIncrementalConfig;
+import io.dataease.plugins.common.dto.datasource.TableField;
 import io.dataease.service.dataset.DataSetTableService;
 import io.swagger.annotations.*;
 import org.apache.shiro.authz.annotation.Logical;
@@ -47,7 +50,8 @@ public class DataSetTableController {
 
     @DePermissions(value = {
             @DePermission(type = DePermissionType.DATASET, value = "id", level = ResourceAuthLevel.DATASET_LEVEL_MANAGE),
-            @DePermission(type = DePermissionType.DATASET, value = "sceneId", level = ResourceAuthLevel.DATASET_LEVEL_MANAGE)
+            @DePermission(type = DePermissionType.DATASET, value = "sceneId", level = ResourceAuthLevel.DATASET_LEVEL_MANAGE),
+            @DePermission(type = DePermissionType.DATASOURCE, value = "dataSourceId", level = ResourceAuthLevel.DATASOURCE_LEVEL_USE)
     }, logical = Logical.AND)
     @ApiOperation("更新")
     @PostMapping("update")
@@ -65,6 +69,13 @@ public class DataSetTableController {
     }, logical = Logical.AND)
     @ApiOperation("修改")
     @PostMapping("alter")
+    @DeLog(
+        operatetype = SysLogConstants.OPERATE_TYPE.MODIFY,
+        sourcetype = SysLogConstants.SOURCE_TYPE.DATASET,
+        value = "id",
+        positionIndex = 0,
+        positionKey = "sceneId"
+    )
     public void alter(@RequestBody DataSetTableRequest request) throws Exception {
         dataSetTableService.alter(request);
     }
@@ -126,6 +137,10 @@ public class DataSetTableController {
 
     @ApiOperation("根据sql查询预览数据")
     @PostMapping("sqlPreview")
+    @DePermissions(value = {
+            @DePermission(type = DePermissionType.DATASET, value = "id", level = ResourceAuthLevel.DATASET_LEVEL_USE),
+            @DePermission(type = DePermissionType.DATASOURCE, value = "dataSourceId", level = ResourceAuthLevel.DATASOURCE_LEVEL_USE)
+    }, logical = Logical.AND)
     public Map<String, Object> getSQLPreview(@RequestBody DataSetTableRequest dataSetTableRequest) throws Exception {
         return dataSetTableService.getSQLPreview(dataSetTableRequest);
     }
@@ -172,7 +187,7 @@ public class DataSetTableController {
     @ApiOperation("检测doris")
     @PostMapping("checkDorisTableIsExists/{id}")
     public Boolean checkDorisTableIsExists(@PathVariable String id) throws Exception {
-        return dataSetTableService.checkDorisTableIsExists(id);
+        return dataSetTableService.checkEngineTableIsExists(id);
     }
 
     @ApiOperation("搜索")
@@ -194,4 +209,10 @@ public class DataSetTableController {
     public Map<String, Object> unionPreview(@RequestBody DataSetTableRequest dataSetTableRequest) throws Exception {
         return dataSetTableService.getUnionPreview(dataSetTableRequest);
     }
+
+    @ApiOperation("根据仪表板视图ID查询数据集变量")
+    @PostMapping("/paramsWithIds")
+    List<SqlVariableDetails> paramsWithIds(@RequestBody List<String> viewIds){
+        return dataSetTableService.paramsWithIds(viewIds);
+    };
 }

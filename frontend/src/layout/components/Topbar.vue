@@ -27,7 +27,7 @@
         <lang-select class="right-menu-item hover-effect" />
         <div style="height: 100%;padding: 0 8px;" class="right-menu-item hover-effect">
           <a
-            href="https://dataease.io/docs/"
+            :href="helpLink"
             target="_blank"
             style="display: flex;height: 100%;width: 100%;justify-content: center;align-items: center;"
           >
@@ -151,6 +151,12 @@ export default {
       }
       return this.variables.topBarMenuTextActive
     },
+    helpLink() {
+      if (this.$store.getters.uiInfo && this.$store.getters.uiInfo['ui.helpLink'] && this.$store.getters.uiInfo['ui.helpLink'].paramValue) {
+        return this.$store.getters.uiInfo['ui.helpLink'].paramValue
+      }
+      return 'https://dataease.io/docs/'
+    },
     /* topMenuColor() {
         return this.$store.getters.uiInfo.topMenuColor
       }, */
@@ -191,10 +197,18 @@ export default {
     bus.$on('set-top-menu-active-info', this.setTopMenuActiveInfo)
     bus.$on('set-top-text-info', this.setTopTextInfo)
     bus.$on('set-top-text-active-info', this.setTopTextActiveInfo)
+    bus.$on('sys-logout', this.logout)
     this.showTips && this.$nextTick(() => {
       const drop = this.$refs['my-drop']
       drop && drop.show && drop.show()
     })
+  },
+  beforeDestroy() {
+    bus.$off('set-top-menu-info', this.setTopMenuInfo)
+    bus.$off('set-top-menu-active-info', this.setTopMenuActiveInfo)
+    bus.$off('set-top-text-info', this.setTopTextInfo)
+    bus.$off('set-top-text-active-info', this.setTopTextActiveInfo)
+    bus.$off('sys-logout', this.logout)
   },
   created() {
     this.loadUiInfo()
@@ -280,6 +294,11 @@ export default {
     },
     // 设置侧边栏的显示和隐藏
     setSidebarHide(route) {
+      const hidePaths = ['/person-info', '/person-pwd', '/about']
+      if (hidePaths.includes(route.path)) {
+        this.$store.dispatch('app/toggleSideBarHide', true)
+        return
+      }
       //   if (!route.children || route.children.length === 1) {
       if (route.name !== 'system' && (!route.children || this.showChildLength(route) === 1)) {
         this.$store.dispatch('app/toggleSideBarHide', true)
@@ -294,9 +313,13 @@ export default {
       }
       return route.children.filter(kid => !kid.hidden).length
     },
-    async logout() {
-      await this.$store.dispatch('user/logout')
-      this.$router.push(`/login?redirect=${this.$route.fullPath}`)
+    async logout(param) {
+      const result = await this.$store.dispatch('user/logout', param)
+      if (result !== 'success' && result !== 'fail') {
+        window.location.href = result
+      } else {
+        this.$router.push(`/login?redirect=${this.$route.fullPath}`)
+      }
     },
     loadUiInfo() {
       this.$store.dispatch('user/getUI').then(() => {

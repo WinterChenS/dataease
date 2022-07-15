@@ -4,7 +4,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.xiaoymin.knife4j.annotations.ApiSupport;
 import io.dataease.auth.annotation.DePermission;
-import io.dataease.base.domain.DatasetTableTask;
+import io.dataease.plugins.common.base.domain.DatasetTableTask;
 import io.dataease.commons.constants.DePermissionType;
 import io.dataease.commons.constants.ResourceAuthLevel;
 import io.dataease.commons.utils.PageUtils;
@@ -43,7 +43,6 @@ public class DataSetTableTaskController {
         return dataSetTableTaskService.save(dataSetTaskRequest);
     }
 
-    //TODO
     @ApiOperation("删除")
     @PostMapping("delete/{id}")
     public void delete(@PathVariable String id) {

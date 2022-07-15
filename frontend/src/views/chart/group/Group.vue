@@ -204,7 +204,7 @@
             <span style="float: right;">
               <el-select v-model="view.render" class="render-select" style="width: 70px" size="mini">
                 <el-option
-                  v-for="item in renderOptions"
+                  v-for="item in pluginRenderOptions"
                   :key="item.value"
                   :value="item.value"
                   :label="item.name"
@@ -224,7 +224,7 @@
           </el-row>
         </el-row>
         <el-row class="chart-box" style="text-align: center;">
-          <svg-icon :icon-class="view.type" class="chart-icon" />
+          <svg-icon :icon-class="view.isPlugin && view.type && view.type !== 'buddle-map' ? ('/api/pluginCommon/staticInfo/' + view.type + '/svg') : view.type" class="chart-icon" />
         </el-row>
       </el-row>
 
@@ -297,6 +297,7 @@ import TableSelector from '../view/TableSelector'
 import GroupMoveSelector from '../components/TreeSelector/GroupMoveSelector'
 import ChartMoveSelector from '../components/TreeSelector/ChartMoveSelector'
 import ChartType from '@/views/chart/view/ChartType'
+import { pluginTypes } from '@/api/chart/chart'
 import {
   DEFAULT_COLOR_CASE,
   DEFAULT_LABEL,
@@ -308,8 +309,13 @@ import {
   DEFAULT_YAXIS_STYLE,
   DEFAULT_YAXIS_EXT_STYLE,
   DEFAULT_BACKGROUND_COLOR,
-  DEFAULT_SPLIT
+  DEFAULT_SPLIT,
+  DEFAULT_FUNCTION_CFG,
+  DEFAULT_THRESHOLD,
+  DEFAULT_TOTAL
 } from '../chart/chart'
+import { checkViewTitle } from '@/components/canvas/utils/utils'
+import { adaptCurTheme } from '@/components/canvas/utils/style'
 
 export default {
   name: 'Group',
@@ -417,7 +423,8 @@ export default {
         folder: this.$t('commons.folder')
       },
       currentViewNodeData: {},
-      currentKey: null
+      currentKey: null,
+      pluginRenderOptions: []
     }
   },
   computed: {
@@ -450,6 +457,21 @@ export default {
     }
 
   },
+  created() {
+    const plugins = localStorage.getItem('plugin-views') && JSON.parse(localStorage.getItem('plugin-views'))
+    if (plugins) {
+      this.loadPluginType()
+    } else {
+      pluginTypes().then(res => {
+        const plugins = res.data
+        localStorage.setItem('plugin-views', JSON.stringify(plugins))
+        this.loadPluginType()
+      }).catch(e => {
+        localStorage.setItem('plugin-views', null)
+        this.loadPluginType()
+      })
+    }
+  },
   mounted() {
     if (this.mountedInit) {
       this.treeNode(true)
@@ -458,6 +480,13 @@ export default {
     this.getChartGroupTree()
   },
   methods: {
+    loadPluginType() {
+      const plugins = localStorage.getItem('plugin-views') && JSON.parse(localStorage.getItem('plugin-views')) || []
+      const pluginOptions = plugins.filter(plugin => !this.renderOptions.some(option => option.value === plugin.render)).map(plugin => {
+        return { name: plugin.render, value: plugin.render }
+      })
+      this.pluginRenderOptions = [...this.renderOptions, ...pluginOptions]
+    },
     clickAdd(param) {
       this.currGroup = param.data
       if (param.type === 'group') {
@@ -657,6 +686,9 @@ export default {
           this.tData = res.data
           this.initCurrentNode()
         }
+        if (this.filterText) {
+          this.$refs.chartTreeRef.filter(this.filterText)
+        }
       })
     },
 
@@ -738,6 +770,15 @@ export default {
         })
         return
       }
+
+      if (checkViewTitle('new', null, this.chartName)) {
+        this.$message({
+          showClose: true,
+          message: this.$t('chart.title_repeat'),
+          type: 'error'
+        })
+        return
+      }
       const view = {}
       view.name = this.chartName
       view.title = this.chartName
@@ -748,21 +789,30 @@ export default {
       view.render = this.view.render
       view.resultMode = 'custom'
       view.resultCount = 1000
-      view.customAttr = JSON.stringify({
+      const customAttr = {
         color: DEFAULT_COLOR_CASE,
         tableColor: DEFAULT_COLOR_CASE,
         size: DEFAULT_SIZE,
         label: DEFAULT_LABEL,
-        tooltip: DEFAULT_TOOLTIP
-      })
-      view.customStyle = JSON.stringify({
+        tooltip: DEFAULT_TOOLTIP,
+        totalCfg: DEFAULT_TOTAL
+      }
+      const customStyle = {
         text: DEFAULT_TITLE_STYLE,
         legend: DEFAULT_LEGEND_STYLE,
         xAxis: DEFAULT_XAXIS_STYLE,
         yAxis: DEFAULT_YAXIS_STYLE,
         yAxisExt: DEFAULT_YAXIS_EXT_STYLE,
-        background: DEFAULT_BACKGROUND_COLOR,
         split: DEFAULT_SPLIT
+      }
+      // 新建的视图应用当前主题
+      adaptCurTheme(customStyle, customAttr)
+      view.customAttr = JSON.stringify(customAttr)
+      view.customStyle = JSON.stringify(customStyle)
+      view.senior = JSON.stringify({
+        functionCfg: DEFAULT_FUNCTION_CFG,
+        assistLine: [],
+        threshold: DEFAULT_THRESHOLD
       })
       view.stylePriority = 'view' // 默认样式优先级视图
       view.xaxis = JSON.stringify([])
@@ -773,9 +823,11 @@ export default {
       view.customFilter = JSON.stringify([])
       view.drillFields = JSON.stringify([])
       view.extBubble = JSON.stringify([])
+      view.viewFields = JSON.stringify([])
       this.setChartDefaultOptions(view)
+
       const _this = this
-      post('/chart/view/save/' + this.panelInfo.id, view).then(response => {
+      post('/chart/view/newOne/' + this.panelInfo.id, view, true).then(response => {
         this.closeCreateChart()
         this.$store.dispatch('chart/setTableId', null)
         this.$store.dispatch('chart/setTableId', this.table.id)

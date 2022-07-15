@@ -1,12 +1,17 @@
 package io.dataease.controller.datasource;
 
 import com.github.xiaoymin.knife4j.annotations.ApiSupport;
+import io.dataease.auth.annotation.DeLog;
 import io.dataease.auth.annotation.DePermission;
-import io.dataease.base.domain.Datasource;
+import io.dataease.commons.constants.SysLogConstants;
+import io.dataease.commons.utils.DeLogUtils;
+import io.dataease.dto.SysLogDTO;
+import io.dataease.plugins.common.base.domain.Datasource;
 import io.dataease.commons.constants.DePermissionType;
 import io.dataease.commons.constants.ResourceAuthLevel;
 import io.dataease.commons.utils.AuthUtils;
 import io.dataease.controller.ResultHolder;
+import io.dataease.controller.datasource.request.UpdataDsRequest;
 import io.dataease.controller.request.DatasourceUnionRequest;
 import io.dataease.controller.request.datasource.ApiDefinition;
 import io.dataease.dto.datasource.DBTableDTO;
@@ -14,11 +19,13 @@ import io.dataease.service.datasource.DatasourceService;
 import io.dataease.dto.DatasourceDTO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.springframework.web.bind.annotation.*;
 import springfox.documentation.annotations.ApiIgnore;
 
 import javax.annotation.Resource;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -35,14 +42,26 @@ public class DatasourceController {
     @DePermission(type = DePermissionType.DATASOURCE, value = "id")
     @ApiOperation("新增数据源")
     @PostMapping("/add")
+    @DeLog(
+        operatetype = SysLogConstants.OPERATE_TYPE.CREATE,
+        sourcetype = SysLogConstants.SOURCE_TYPE.DATASOURCE,
+        positionIndex = 0,positionKey = "type",
+        value = "id"
+    )
     public Datasource addDatasource(@RequestBody Datasource datasource) throws Exception{
         return datasourceService.addDatasource(datasource);
     }
 
     @RequiresPermissions("datasource:read")
-    @ApiOperation("验证数据源")
+    @ApiOperation("数据源类型")
+    @GetMapping("/types")
+    public Collection types() throws Exception{
+        return datasourceService.types();
+    }
+
+    @ApiIgnore
     @PostMapping("/validate")
-    public ResultHolder validate(@RequestBody DatasourceDTO datasource) throws Exception {
+    public ResultHolder validate(@RequestBody Datasource datasource) throws Exception {
         return datasourceService.validate(datasource);
     }
 
@@ -69,26 +88,37 @@ public class DatasourceController {
     }
 
     @RequiresPermissions("datasource:read")
-    @DePermission(type = DePermissionType.DATASOURCE, level = ResourceAuthLevel.DATASOURCE_LEVEL_MANAGE)
+    @DePermission(type = DePermissionType.DATASOURCE, level = ResourceAuthLevel.DATASOURCE_LEVEL_MANAGE, value = "id")
     @ApiOperation("删除数据源")
     @PostMapping("/delete/{datasourceID}")
     public ResultHolder deleteDatasource(@PathVariable(value = "datasourceID") String datasourceID) throws Exception {
-        return datasourceService.deleteDatasource(datasourceID);
+        Datasource datasource = datasourceService.get(datasourceID);
+        SysLogDTO sysLogDTO = DeLogUtils.buildLog(SysLogConstants.OPERATE_TYPE.DELETE, SysLogConstants.SOURCE_TYPE.DATASOURCE, datasourceID, datasource.getType(), null, null);
+        ResultHolder resultHolder = datasourceService.deleteDatasource(datasourceID);
+        if (ObjectUtils.isNotEmpty(resultHolder) && resultHolder.isSuccess())
+            DeLogUtils.save(sysLogDTO);
+        return resultHolder;
     }
 
     @RequiresPermissions("datasource:read")
     @DePermission(type = DePermissionType.DATASOURCE, value = "id", level = ResourceAuthLevel.DATASOURCE_LEVEL_MANAGE)
     @ApiOperation("更新数据源")
     @PostMapping("/update")
-    public void updateDatasource(@RequestBody Datasource Datasource) {
-        datasourceService.updateDatasource(Datasource);
+    @DeLog(
+        operatetype = SysLogConstants.OPERATE_TYPE.MODIFY,
+        sourcetype = SysLogConstants.SOURCE_TYPE.DATASOURCE,
+        positionIndex = 0,positionKey = "type",
+        value = "id"
+    )
+    public void updateDatasource(@RequestBody UpdataDsRequest dsRequest) throws Exception{
+        datasourceService.updateDatasource(dsRequest);
     }
 
-    @DePermission(type = DePermissionType.DATASOURCE, value = "id")
+    @DePermission(type = DePermissionType.DATASOURCE)
     @ApiOperation("查询数据源下属所有表")
-    @PostMapping("/getTables")
-    public List<DBTableDTO> getTables(@RequestBody Datasource datasource) throws Exception {
-        return datasourceService.getTables(datasource);
+    @PostMapping("/getTables/{id}")
+    public List<DBTableDTO> getTables(@PathVariable String id) throws Exception {
+        return datasourceService.getTables(id);
     }
 
     @ApiIgnore

@@ -38,6 +38,7 @@
         <div class="block" :style="treeStyle">
           <el-tree
             ref="datasetTreeRef"
+            :current-node-key="checkedTable ? checkedTable.id : ''"
             :default-expanded-keys="expandedArray"
             :data="data"
             node-key="id"
@@ -79,8 +80,8 @@
 </template>
 
 <script>
-import { isKettleRunning, post } from '@/api/dataset/dataset'
 import { queryAuthModel } from '@/api/authModel/authModel'
+import { post } from '@/api/dataset/dataset'
 export default {
   name: 'DatasetGroupSelectorTree',
   props: {
@@ -133,6 +134,11 @@ export default {
       type: Boolean,
       required: false,
       default: false
+    },
+    checkedTable: {
+      type: Object,
+      required: false,
+      default: null
     }
   },
   data() {
@@ -144,7 +150,6 @@ export default {
         all: this.$t('commons.all'),
         folder: this.$t('commons.folder')
       },
-      kettleRunning: false,
       sceneMode: false,
       search: '',
       data: [],
@@ -198,16 +203,11 @@ export default {
   },
   mounted() {
     this.treeNode()
+    this.initExpand()
   },
   created() {
-    this.kettleState()
   },
   methods: {
-    kettleState() {
-      isKettleRunning(false).then(res => {
-        this.kettleRunning = res.data
-      })
-    },
     close() {
       this.editGroup = false
       this.groupForm = {
@@ -223,6 +223,11 @@ export default {
       this.editTable = false
       this.tableForm = {
         name: ''
+      }
+    },
+    initExpand() {
+      if (this.checkedTable && this.checkedTable.pid) {
+        this.expandedArray.push(this.checkedTable.pid)
       }
     },
     treeNode(cache) {

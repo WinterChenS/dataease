@@ -1,6 +1,6 @@
 package io.dataease.controller.panel.server;
 
-import io.dataease.base.domain.PanelShare;
+import io.dataease.plugins.common.base.domain.PanelShare;
 import io.dataease.controller.panel.api.ShareApi;
 import io.dataease.controller.request.panel.PanelShareFineDto;
 import io.dataease.controller.request.panel.PanelShareRemoveRequest;
@@ -51,5 +51,10 @@ public class ShareServer implements ShareApi {
     @Override
     public void removeShares(@RequestBody PanelShareRemoveRequest request) {
         shareService.removeShares(request);
+    }
+
+    @Override
+    public void removePanelShares(String panelId) {
+        shareService.removeSharesyPanel(panelId);
     }
 }

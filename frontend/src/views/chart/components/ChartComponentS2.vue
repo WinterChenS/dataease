@@ -6,9 +6,9 @@
     </span>
     <div ref="tableContainer" style="width: 100%;overflow: hidden;" :style="{background:container_bg_class.background}">
       <div v-if="chart.type === 'table-normal'" :id="chartId" style="width: 100%;overflow: hidden;" :class="chart.drill ? 'table-dom-normal-drill' : 'table-dom-normal'" />
-      <div v-if="chart.type === 'table-info'" :id="chartId" style="width: 100%;overflow: hidden;" :class="chart.drill ? 'table-dom-info-drill' : 'table-dom-info'" />
+      <div v-if="chart.type === 'table-info'" :id="chartId" style="width: 100%;overflow: hidden;" :class="chart.drill ? (showPage ? 'table-dom-info-drill' : 'table-dom-info-drill-pull') : (showPage ? 'table-dom-info' : 'table-dom-info-pull')" />
       <div v-if="chart.type === 'table-pivot'" :id="chartId" style="width: 100%;overflow: hidden;" class="table-dom-normal" />
-      <el-row v-show="chart.type === 'table-info'" class="table-page">
+      <el-row v-show="showPage" class="table-page">
         <span class="total-style">
           {{ $t('chart.total') }}
           <span>{{ (chart.data && chart.data.tableRow)?chart.data.tableRow.length:0 }}</span>
@@ -87,7 +87,7 @@ export default {
         textAlign: 'left',
         fontStyle: 'normal',
         fontWeight: 'normal',
-        background: hexColorToRGBA('#ffffff', 0)
+        background: ''
       },
       container_bg_class: {
         background: hexColorToRGBA('#ffffff', 0)
@@ -99,7 +99,10 @@ export default {
         pageSize: 20,
         show: 0
       },
-      tableData: []
+      tableData: [],
+      showPage: false,
+      scrollTimer: null,
+      scrollTop: 0
     }
   },
 
@@ -132,20 +135,25 @@ export default {
   mounted() {
     this.preDraw()
   },
+  beforeDestroy() {
+    clearInterval(this.scrollTimer)
+  },
   methods: {
     initData() {
       let datas = []
+      this.showPage = false
       if (this.chart.data && this.chart.data.fields) {
         this.fields = JSON.parse(JSON.stringify(this.chart.data.fields))
         const attr = JSON.parse(this.chart.customAttr)
         this.currentPage.pageSize = parseInt(attr.size.tablePageSize ? attr.size.tablePageSize : 20)
         datas = JSON.parse(JSON.stringify(this.chart.data.tableRow))
-        if (this.chart.type === 'table-info') {
+        if (this.chart.type === 'table-info' && (attr.size.tablePageMode === 'page' || !attr.size.tablePageMode) && datas.length > this.currentPage.pageSize) {
           // 计算分页
           this.currentPage.show = datas.length
           const pageStart = (this.currentPage.page - 1) * this.currentPage.pageSize
           const pageEnd = pageStart + this.currentPage.pageSize
           datas = datas.slice(pageStart, pageEnd)
+          this.showPage = true
         }
       } else {
         this.fields = []
@@ -205,15 +213,14 @@ export default {
 
       if (this.myChart && this.antVRenderStatus) {
         this.myChart.render()
+        this.initScroll()
       }
       this.setBackGroundBorder()
     },
 
     antVAction(param) {
-      console.log(param, 'param')
       const cell = this.myChart.getCell(param.target)
       const meta = cell.getMeta()
-      console.log(meta, 'meta')
 
       let xAxis = []
       if (this.chart.xaxis) {
@@ -248,7 +255,6 @@ export default {
           dimensionList: dimensionList
         }
       }
-      console.log(this.pointParam, 'pointParam')
 
       if (this.trackMenu.length < 2) { // 只有一个事件直接调用
         this.trackClick(this.trackMenu[0])
@@ -371,6 +377,34 @@ export default {
         pageSize: 20,
         show: 0
       }
+    },
+
+    initScroll() {
+      clearInterval(this.scrollTimer)
+      // 首先回到最顶部，然后计算行高*行数作为top，最后判断：如果top<数据量*行高，继续滚动，否则回到顶部
+      const customAttr = JSON.parse(this.chart.customAttr)
+      const senior = JSON.parse(this.chart.senior)
+
+      this.scrollTop = 0
+      this.myChart.store.set('scrollY', this.scrollTop)
+      this.myChart.render()
+
+      if (senior && senior.scrollCfg && senior.scrollCfg.open && (this.chart.type === 'table-normal' || (this.chart.type === 'table-info' && !this.showPage))) {
+        const rowHeight = customAttr.size.tableItemHeight
+        const headerHeight = customAttr.size.tableTitleHeight
+
+        this.scrollTimer = setInterval(() => {
+          const top = rowHeight * senior.scrollCfg.row
+          const dom = document.getElementById(this.chartId)
+          if ((dom.offsetHeight - headerHeight + this.scrollTop) < rowHeight * this.chart.data.tableRow.length) {
+            this.scrollTop += top
+          } else {
+            this.scrollTop = 0
+          }
+          this.myChart.store.set('scrollY', this.scrollTop)
+          this.myChart.render()
+        }, senior.scrollCfg.interval)
+      }
     }
   }
 }
@@ -380,11 +414,17 @@ export default {
 .table-dom-info{
   height:calc(100% - 36px);
 }
+.table-dom-info-pull{
+  height:calc(100%);
+}
 .table-dom-normal{
   height:100%;
 }
 .table-dom-info-drill{
   height:calc(100% - 36px - 12px);
+}
+.table-dom-info-drill-pull{
+  height:calc(100% - 12px);
 }
 .table-dom-normal-drill{
   height:calc(100% - 12px);
@@ -408,5 +448,11 @@ export default {
 }
 .page-style >>> .el-input__inner{
   height: 24px;
+}
+.page-style >>> button{
+  background: transparent!important;
+}
+.page-style >>> li{
+  background: transparent!important;
 }
 </style>

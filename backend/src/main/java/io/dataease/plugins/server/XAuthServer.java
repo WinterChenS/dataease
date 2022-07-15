@@ -2,8 +2,11 @@ package io.dataease.plugins.server;
 
 import io.dataease.auth.api.dto.CurrentUserDto;
 import io.dataease.commons.constants.AuthConstants;
+import io.dataease.commons.constants.SysLogConstants;
 import io.dataease.commons.utils.AuthUtils;
+import io.dataease.commons.utils.DeLogUtils;
 import io.dataease.controller.handler.annotation.I18n;
+import io.dataease.dto.SysLogDTO;
 import io.dataease.listener.util.CacheUtils;
 import io.dataease.plugins.config.SpringContextUtil;
 import io.dataease.plugins.xpack.auth.dto.request.XpackBaseTreeRequest;
@@ -17,10 +20,7 @@ import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.springframework.web.bind.annotation.*;
 import io.dataease.plugins.xpack.auth.service.AuthXpackService;
 import springfox.documentation.annotations.ApiIgnore;
-
 import java.util.*;
-import java.util.stream.Collectors;
-
 @ApiIgnore
 @RequestMapping("/plugin/auth")
 @RestController
@@ -76,7 +76,7 @@ public class XAuthServer {
             String authCacheKey = getAuthCacheKey(request);
             if (StringUtils.isNotBlank(authCacheKey)) {
                 if (StringUtils.equals("dept", request.getAuthTargetType())) {
-                    List<String> authTargets = getAuthModels(request.getAuthTarget(), request.getAuthTargetType(),
+                    List<String> authTargets = AuthUtils.getAuthModels(request.getAuthTarget(), request.getAuthTargetType(),
                             user.getUserId(), user.getIsAdmin());
                     if (CollectionUtils.isNotEmpty(authTargets)) {
                         authTargets.forEach(deptId -> {
@@ -86,19 +86,49 @@ public class XAuthServer {
                 } else {
                     CacheUtils.remove(authCacheKey, request.getAuthTargetType() + request.getAuthTarget());
                 }
-
             }
+
+            SysLogConstants.OPERATE_TYPE operateType = SysLogConstants.OPERATE_TYPE.AUTHORIZE;
+            if (1 == request.getAuthDetail().getPrivilegeValue()) {
+                operateType = SysLogConstants.OPERATE_TYPE.UNAUTHORIZE;
+            }
+
+            SysLogConstants.SOURCE_TYPE sourceType = sourceType(request.getAuthSourceType());
+
+            SysLogConstants.SOURCE_TYPE tarType = tarType(request.getAuthTargetType());
+            SysLogDTO sysLogDTO = DeLogUtils.buildLog(operateType, sourceType, request.getAuthSource(), request.getAuthTarget(), tarType);
+            DeLogUtils.save(sysLogDTO);
         });
     }
 
-    private List<String> getAuthModels(String id, String type, Long userId, Boolean isAdmin) {
-        AuthXpackService sysAuthService = SpringContextUtil.getBean(AuthXpackService.class);
-        List<XpackVAuthModelDTO> vAuthModelDTOS = sysAuthService
-                .searchAuthModelTree(new XpackBaseTreeRequest(id, type, "children"), userId, isAdmin);
-        List<String> authSources = Optional.ofNullable(vAuthModelDTOS).orElse(new ArrayList<>()).stream()
-                .map(XpackVAuthModelDTO::getId)
-                .collect(Collectors.toList());
-        return authSources;
+    private SysLogConstants.SOURCE_TYPE sourceType(String sourceType) {
+        if (StringUtils.equals("link", sourceType)) {
+            return SysLogConstants.SOURCE_TYPE.DATASOURCE;
+        }
+        if (StringUtils.equals("menu", sourceType)) {
+            return SysLogConstants.SOURCE_TYPE.MENU;
+        }
+        if (StringUtils.equals("dataset", sourceType)) {
+            return SysLogConstants.SOURCE_TYPE.DATASET;
+        }
+        if (StringUtils.equals("panel", sourceType)) {
+            return SysLogConstants.SOURCE_TYPE.PANEL;
+        }
+        return null;
+    }
+
+    private SysLogConstants.SOURCE_TYPE tarType(String targetType) {
+        if (StringUtils.equals("user", targetType)) {
+            return SysLogConstants.SOURCE_TYPE.USER;
+        }
+        if (StringUtils.equals("role", targetType)) {
+            return SysLogConstants.SOURCE_TYPE.ROLE;
+        }
+        if (StringUtils.equals("dept", targetType)) {
+            return SysLogConstants.SOURCE_TYPE.DEPT;
+        }
+
+        return null;
     }
 
     private String getAuthCacheKey(XpackSysAuthRequest request) {

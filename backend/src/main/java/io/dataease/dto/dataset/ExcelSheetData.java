@@ -1,9 +1,8 @@
 package io.dataease.dto.dataset;
 
-import io.dataease.dto.datasource.TableField;
+import io.dataease.plugins.common.dto.datasource.TableField;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
-
 import java.util.List;
 import java.util.Map;
 
@@ -29,4 +28,7 @@ public class ExcelSheetData {
     private String path;
     @ApiModelProperty("字段MD5")
     private String fieldsMd5;
+    @ApiModelProperty("字段变更")
+    private Boolean changeFiled = false;
+    private Boolean effectExtField = false;
 }

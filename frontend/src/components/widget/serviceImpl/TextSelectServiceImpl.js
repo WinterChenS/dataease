@@ -12,12 +12,15 @@ const dialogPanel = {
       multiple: false,
       placeholder: 'detextselect.placeholder',
       viewIds: [],
+      parameters: [],
       datas: [],
       key: 'id',
       label: 'text',
       value: 'id',
       fieldId: '',
-      dragItems: []
+      dragItems: [],
+      sort: {},
+      visual: false
     },
     value: '',
     manualModify: false
@@ -37,7 +40,9 @@ const drawPanel = {
     lineHeight: '',
     letterSpacing: 0,
     textAlign: '',
-    color: ''
+    color: '',
+    hPosition: 'left',
+    vPosition: 'center'
   },
   component: 'de-select'
 }
@@ -48,6 +53,7 @@ class TextSelectServiceImpl extends WidgetService {
     super(options)
     this.filterDialog = true
     this.showSwitch = true
+    this.showVisual = true
   }
 
   initLeftPanel() {
@@ -89,6 +95,9 @@ class TextSelectServiceImpl extends WidgetService {
       operator: element.options.attrs.multiple ? 'in' : 'eq'
     }
     return param
+  }
+  isSortWidget() {
+    return true
   }
 
   fillValueDerfault(element) {

@@ -182,7 +182,7 @@ export default {
       sourceFieldOption: [],
       targetFieldOption: [],
       targetTable: {},
-      customType: ['db', 'sql', 'excel']
+      customType: ['db', 'sql', 'excel', 'api']
     }
   },
   watch: {
@@ -207,10 +207,9 @@ export default {
         if (this.table.mode === 0) {
           this.customType = ['db']
         } else {
-          this.customType = ['db', 'sql', 'excel']
+          this.customType = ['db', 'sql', 'excel', 'api']
         }
         post('dataset/union/listByTableId/' + this.table.id, {}).then(response => {
-          // console.log(response)
           this.unionData = response.data
         })
       }
@@ -235,7 +234,6 @@ export default {
       // })
     },
     saveUnion() {
-      // console.log(this.union)
       if (!this.union.sourceTableFieldId || !this.union.sourceUnionRelation || !this.union.targetTableId || !this.union.targetTableFieldId) {
         this.$message({
           type: 'error',
@@ -298,7 +296,6 @@ export default {
       })
     },
     getTable(param) {
-      // console.log(param)
       if (param.id === this.table.id) {
         this.$message({
           type: 'error',

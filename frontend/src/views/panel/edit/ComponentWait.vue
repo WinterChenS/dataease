@@ -6,10 +6,10 @@
     <el-row class="component-wait-main">
       <el-col
         :span="8"
-        v-for="(config, index) in pcComponentData"
+        v-for="(config) in pcComponentData"
         v-if="!config.mobileSelected"
         :id="'wait' + config.id"
-        :key="index"
+        :key="config.id"
       >
         <component-wait-item
           :config="config"

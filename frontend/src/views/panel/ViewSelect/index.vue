@@ -2,7 +2,7 @@
   <el-col v-loading="loading">
     <el-row style="margin-top: 5px">
       <el-row style="margin-left: 5px;margin-right: 5px">
-        <el-col :span="23">
+        <el-col :span="17">
           <el-input
             v-model="templateFilterText"
             :placeholder="$t('panel.filter_keywords')"
@@ -11,9 +11,9 @@
             prefix-icon="el-icon-search"
           />
         </el-col>
-        <!--        <el-col v-if="!selectModel" :span="7">-->
-        <!--          <el-button type="primary" size="mini" style="float: right" @click="newChart">新建 </el-button>-->
-        <!--        </el-col>-->
+        <el-col v-if="!selectModel" :span="7">
+          <el-button type="primary" size="mini" style="float: right" @click="newChart">新建 </el-button>
+        </el-col>
 
       </el-row>
       <el-row style="margin-top: 5px">
@@ -46,9 +46,9 @@
                 <svg-icon icon-class="panel" class="ds-icon-scene" />
               </span>
               <span v-else>
-                <svg-icon :icon-class="data.modelInnerType" style="width: 14px;height: 14px" />
+                <svg-icon :icon-class="data.isPlugin && data.modelInnerType && data.modelInnerType !== 'buddle-map' ? ('/api/pluginCommon/staticInfo/' + data.modelInnerType + '/svg') : data.modelInnerType" style="width: 14px;height: 14px" />
               </span>
-              <span style="margin-left: 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ data.name }}</span>
+              <span style="margin-left: 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" :title="data.name">{{ data.name }}</span>
             </span>
             <span v-if="data.mode===1" class="child">
               <span @click.stop>
@@ -74,7 +74,8 @@ import eventBus from '@/components/canvas/utils/eventBus'
 import { mapState } from 'vuex'
 import { queryPanelViewTree } from '@/api/panel/panel'
 import { deleteCircle } from '@/api/chart/chart'
-import { delUser } from '@/api/system/user'
+import { pluginTypes } from '@/api/chart/chart'
+import { matrixBaseChange } from '@/components/canvas/utils/utils'
 
 export default {
   name: 'ViewSelect',
@@ -96,7 +97,8 @@ export default {
       data: [],
       showdetail: false,
       detailItem: null,
-      loading: false
+      loading: false,
+      plugins: null
     }
   },
   computed: {
@@ -110,7 +112,20 @@ export default {
     }
   },
   created() {
-    this.loadData()
+    this.plugins = localStorage.getItem('plugin-views') && JSON.parse(localStorage.getItem('plugin-views'))
+    if (this.plugins) {
+      this.loadData()
+    } else {
+      pluginTypes().then(res => {
+        this.plugins = res.data
+        localStorage.setItem('plugin-views', JSON.stringify(res.data))
+        this.loadData()
+      }).catch(e => {
+        localStorage.setItem('plugin-views', null)
+        this.plugins = null
+        this.loadData()
+      })
+    }
   },
   methods: {
     filterNode(value, data) {
@@ -139,7 +154,6 @@ export default {
       eventBus.$emit('startMoveIn')
     },
     dragEnd() {
-      // console.log('dragEnd')
       this.$store.commit('clearDragComponentInfo')
     },
     // 判断节点能否被拖拽
@@ -172,6 +186,11 @@ export default {
         if (node.modelType === 'panel' || node.nodeType === 'spine') {
           node.disabled = true
         }
+
+        if (node.modelType === 'view' && node.modelInnerType && this.plugins && this.plugins.length) {
+          node.isPlugin = this.plugins.some(plugin => plugin.value === node.modelInnerType)
+        }
+
         if (node.children && node.children.length > 0) {
           this.setParentDisable(node.children)
         }
@@ -182,7 +201,7 @@ export default {
       // 用户视图设置 复制一个模板
       componentList.forEach(componentTemp => {
         if (componentTemp.type === 'view') {
-          component = deepCopy(componentTemp)
+          component = matrixBaseChange(deepCopy(componentTemp))
         }
       })
       component.auxiliaryMatrix = this.canvasStyleData.auxiliaryMatrix

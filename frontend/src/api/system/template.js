@@ -4,7 +4,8 @@ export function save(data) {
   return request({
     url: '/template/save',
     data: data,
-    method: 'post'
+    method: 'post',
+    loading: true
   })
 }
 export function templateDelete(id) {
@@ -33,6 +34,7 @@ export function find(data) {
   return request({
     url: '/template/find',
     data: data,
+    loading: true,
     method: 'post'
   })
 }

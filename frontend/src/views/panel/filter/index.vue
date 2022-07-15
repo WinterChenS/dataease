@@ -1,12 +1,9 @@
 <template>
-
   <div class="filter-container" @dragstart="handleDragStart" @dragend="handleDragEnd()">
-
     <div v-for="(item, key) in widgetSubjects" :key="key" class="widget-subject">
       <div class="filter-header">
         <div class="filter-header-text"> {{ key }} </div>
       </div>
-
       <div class="filter-widget-content">
         <div
           v-for="(widget, index) in item"
@@ -30,7 +27,7 @@
 
 <script>
 import { ApplicationContext } from '@/utils/ApplicationContext'
-import { deepCopy } from '@/components/canvas/utils/utils'
+import { deepCopy, matrixBaseChange } from '@/components/canvas/utils/utils'
 import eventBus from '@/components/canvas/utils/eventBus'
 import { mapState } from 'vuex'
 export default {
@@ -55,7 +52,8 @@ export default {
         '文本过滤组件': [
           'textSelectWidget',
           'textSelectGridWidget',
-          'textInputWidget'
+          'textInputWidget',
+          'textSelectTreeWidget'
         ],
         '数字过滤组件': [
           'numberSelectWidget',
@@ -84,7 +82,6 @@ export default {
         return result
       })
     }
-    // console.log('this.widgetSubjects=>' + JSON.stringify(this.widgetSubjects))
   },
 
   methods: {
