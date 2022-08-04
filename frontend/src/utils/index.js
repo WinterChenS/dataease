@@ -1,5 +1,5 @@
 import Cookies from 'js-cookie'
-export function timeSection(date, type) {
+export function timeSection(date, type, labelFormat = 'yyyy-MM-dd') {
   if (!date) {
     return null
   }
@@ -8,10 +8,20 @@ export function timeSection(date, type) {
   }
   const timeRanger = new Array(2)
 
-  date.setHours(0)
-  date.setMinutes(0)
-  date.setSeconds(0)
-  date.setMilliseconds(0)
+  const formatArr = labelFormat ? labelFormat.split(' ') : []
+  const methods = ['setHours', 'setMinutes', 'setSeconds', 'setMilliseconds']
+  let methodsLen = methods.length
+  if (type === 'datetime' && formatArr.length > 1) {
+    const childArr = formatArr[1] ? formatArr[1].split(':') : []
+    const childArrLength = childArr ? childArr.length : 0
+
+    while (--methodsLen >= childArrLength) {
+      date[methods[methodsLen]](0)
+    }
+  } else {
+    methods.forEach(m => date[m](0))
+  }
+
   const end = new Date(date)
   if (type === 'year') {
     date.setDate(1)
@@ -36,6 +46,23 @@ export function timeSection(date, type) {
     end.setMinutes(59)
     end.setSeconds(59)
     end.setMilliseconds(999)
+    timeRanger[1] = end.getTime()
+  }
+
+  if (type === 'datetime') {
+    methodsLen = methods.length
+    if (formatArr.length > 1) {
+      const childArr = formatArr[1] ? formatArr[1].split(':') : []
+      const childArrLength = childArr ? childArr.length : 0
+
+      while (--methodsLen >= childArrLength) {
+        end[methods[methodsLen]](methodsLen === 0 ? 23 : methodsLen === 3 ? 999 : 59)
+      }
+    } else {
+      while (--methodsLen >= 0) {
+        end[methods[methodsLen]](methodsLen === 0 ? 23 : methodsLen === 3 ? 999 : 59)
+      }
+    }
     timeRanger[1] = end.getTime()
   }
   timeRanger[0] = date.getTime()
@@ -199,20 +226,6 @@ export function param2Obj(url) {
   )
 }
 
-// export function formatCondition(param) {
-//   if (!param) {
-//     return null
-//   }
-//   const condition = {}
-//   for (const key in param) {
-//     if (Object.hasOwnProperty.call(param, key)) {
-//       const element = param[key]
-//       condition[element.field] = element.value
-//     }
-//   }
-//   return condition
-// }
-
 export function formatCondition(param) {
   if (!param) {
     return null
@@ -291,4 +304,12 @@ export function getQueryVariable(variable) {
 export function isMobile() {
   const flag = navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)
   return flag
+}
+
+export const isSameVueObj = (source, target) => {
+  if (!source && !target) return true
+  if (!!source && !!target) {
+    return JSON.stringify(source) === JSON.stringify(target)
+  }
+  return false
 }

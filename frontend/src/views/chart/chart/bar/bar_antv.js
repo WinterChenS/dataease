@@ -10,6 +10,7 @@ import {
   getSlider,
   getAnalyse
 } from '@/views/chart/chart/common/common_antv'
+import { antVCustomColor } from '@/views/chart/chart/util'
 
 export function baseBarOptionAntV(plot, container, chart, action, isGroup, isStack) {
   // theme
@@ -42,12 +43,6 @@ export function baseBarOptionAntV(plot, container, chart, action, isGroup, isSta
     slider: slider,
     annotations: analyse,
     interactions: [
-      {
-        type: 'element-active', cfg: {
-          start: [{ trigger: 'element:mouseenter', action: ['element-highlight:highlight', 'element-active:reset', 'cursor:pointer'] }],
-          end: [{ trigger: 'element:mouseleave', action: ['element-highlight:reset', 'element-active:reset', 'cursor:default'] }]
-        }
-      },
       {
         type: 'legend-active', cfg: {
           start: [{ trigger: 'legend-item:mouseenter', action: ['element-active:reset'] }],
@@ -98,6 +93,8 @@ export function baseBarOptionAntV(plot, container, chart, action, isGroup, isSta
   } else {
     delete options.isStack
   }
+  // custom color
+  options.color = antVCustomColor(chart)
 
   // 开始渲染
   if (plot) {
@@ -143,12 +140,6 @@ export function hBaseBarOptionAntV(plot, container, chart, action, isGroup, isSt
     annotations: analyse,
     interactions: [
       {
-        type: 'element-active', cfg: {
-          start: [{ trigger: 'element:mouseenter', action: ['element-highlight:highlight', 'element-active:reset', 'cursor:pointer'] }],
-          end: [{ trigger: 'element:mouseleave', action: ['element-highlight:reset', 'element-active:reset', 'cursor:default'] }]
-        }
-      },
-      {
         type: 'legend-active', cfg: {
           start: [{ trigger: 'legend-item:mouseenter', action: ['element-active:reset'] }],
           end: [{ trigger: 'legend-item:mouseleave', action: ['element-active:reset'] }]
@@ -198,6 +189,8 @@ export function hBaseBarOptionAntV(plot, container, chart, action, isGroup, isSt
   } else {
     delete options.isStack
   }
+  // custom color
+  options.color = antVCustomColor(chart)
 
   // 开始渲染
   if (plot) {

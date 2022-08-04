@@ -1,5 +1,6 @@
 <template>
-  <span>
+  <span style="position: relative;display: inline-block;">
+    <i class="el-icon-arrow-down el-icon-delete" style="position: absolute;top: 6px;right: 24px;color: #878d9f;cursor: pointer;z-index: 1;" @click="removeItem" />
     <el-dropdown trigger="click" size="mini" @command="clickItem">
       <span class="el-dropdown-link">
         <el-tag size="small" class="item-axis" :type="tagType">
@@ -16,8 +17,8 @@
           </span>
           <span class="item-span-style" :title="item.name">{{ item.name }}</span>
           <field-error-tips v-if="tagType === 'danger'" />
-          <span v-if="chart.type !== 'table-info' && item.summary" class="summary-span">
-            {{ $t('chart.' + item.summary) }}<span v-if="item.compareCalc && item.compareCalc.type && item.compareCalc.type !== '' && item.compareCalc.type !== 'none'">-{{ $t('chart.' + item.compareCalc.type) }}</span>
+          <span v-if="chart.type !== 'table-info' && item.summary && !item.chartId" class="summary-span">
+            {{ $t('chart.' + item.summary) }}<span v-if="false && item.compareCalc && item.compareCalc.type && item.compareCalc.type !== '' && item.compareCalc.type !== 'none'">-{{ $t('chart.' + item.compareCalc.type) }}</span>
           </span>
           <i class="el-icon-arrow-down el-icon--right" style="position: absolute;top: 6px;right: 10px;" />
         </el-tag>
@@ -38,7 +39,7 @@
               </el-dropdown-menu>
             </el-dropdown>
           </el-dropdown-item>
-          <el-dropdown-item v-show="chart.type !== 'table-info'" :divided="chart.type === 'chart-mix'">
+          <el-dropdown-item v-show="!item.chartId && chart.type !== 'table-info'" :divided="chart.type === 'chart-mix'">
             <el-dropdown placement="right-start" size="mini" style="width: 100%" @command="summary">
               <span class="el-dropdown-link inner-dropdown-menu">
                 <span>
@@ -49,19 +50,20 @@
                 <i class="el-icon-arrow-right el-icon--right" />
               </span>
               <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item v-if="item.id === 'count' || item.deType === 0 || item.deType === 1" :command="beforeSummary('count')">{{ $t('chart.count') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1" :command="beforeSummary('sum')">{{ $t('chart.sum') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1" :command="beforeSummary('avg')">{{ $t('chart.avg') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1" :command="beforeSummary('max')">{{ $t('chart.max') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1" :command="beforeSummary('min')">{{ $t('chart.min') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1" :command="beforeSummary('stddev_pop')">{{ $t('chart.stddev_pop') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1" :command="beforeSummary('var_pop')">{{ $t('chart.var_pop') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1 && item.deType !== 5" :command="beforeSummary('sum')">{{ $t('chart.sum') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1 && item.deType !== 5" :command="beforeSummary('avg')">{{ $t('chart.avg') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1 && item.deType !== 5" :command="beforeSummary('max')">{{ $t('chart.max') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1 && item.deType !== 5" :command="beforeSummary('min')">{{ $t('chart.min') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1 && item.deType !== 5" :command="beforeSummary('stddev_pop')">{{ $t('chart.stddev_pop') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.id !== 'count' && item.deType !== 0 && item.deType !== 1 && item.deType !== 5" :command="beforeSummary('var_pop')">{{ $t('chart.var_pop') }}</el-dropdown-item>
+                <el-dropdown-item :command="beforeSummary('count')">{{ $t('chart.count') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.id !== 'count'" :command="beforeSummary('count_distinct')">{{ $t('chart.count_distinct') }}</el-dropdown-item>
               </el-dropdown-menu>
             </el-dropdown>
           </el-dropdown-item>
 
           <!--同比/环比-->
-          <el-dropdown-item v-show="chart.type !== 'table-info'">
+          <el-dropdown-item v-show="!item.chartId && chart.type !== 'table-info'">
             <el-dropdown placement="right-start" size="mini" style="width: 100%" @command="quickCalc">
               <span class="el-dropdown-link inner-dropdown-menu">
                 <span>
@@ -78,7 +80,7 @@
             </el-dropdown>
           </el-dropdown-item>
 
-          <el-dropdown-item :divided="chart.type !== 'table-info'">
+          <el-dropdown-item :divided="!item.chartId && chart.type !== 'table-info'">
             <el-dropdown placement="right-start" size="mini" style="width: 100%" @command="sort">
               <span class="el-dropdown-link inner-dropdown-menu">
                 <span>
@@ -98,6 +100,9 @@
           <el-dropdown-item icon="el-icon-files" :command="beforeClickItem('filter')">
             <span>{{ $t('chart.filter') }}...</span>
           </el-dropdown-item>
+          <el-dropdown-item v-if="chart.render === 'antv' && chart.type !== 'gauge' && chart.type !== 'liquid'" icon="el-icon-notebook-2" divided :command="beforeClickItem('formatter')">
+            <span>{{ $t('chart.value_formatter') }}...</span>
+          </el-dropdown-item>
           <el-dropdown-item icon="el-icon-edit-outline" divided :command="beforeClickItem('rename')">
             <span>{{ $t('chart.show_name_set') }}</span>
           </el-dropdown-item>
@@ -112,8 +117,10 @@
 
 <script>
 import { compareItem } from '@/views/chart/chart/compare'
-import { getItemType } from '@/views/chart/components/drag-item/utils'
+import { getItemType, getOriginFieldName } from '@/views/chart/components/drag-item/utils'
 import FieldErrorTips from '@/views/chart/components/drag-item/components/FieldErrorTips'
+import bus from '@/utils/bus'
+import { formatterItem } from '@/views/chart/chart/formatter'
 
 export default {
   name: 'QuotaItem',
@@ -148,7 +155,8 @@ export default {
     return {
       compareItem: compareItem,
       disableEditCompare: false,
-      tagType: getItemType(this.dimensionData, this.quotaData, this.item)
+      tagType: 'success',
+      formatterItem: formatterItem
     }
   },
   watch: {
@@ -165,20 +173,32 @@ export default {
   mounted() {
     this.init()
     this.isEnableCompare()
+    bus.$on('reset-change-table', this.getItemTagType)
+  },
+  beforeDestroy() {
+    bus.$off('reset-change-table', this.getItemTagType)
   },
   methods: {
     init() {
       if (!this.item.compareCalc) {
         this.item.compareCalc = JSON.parse(JSON.stringify(this.compareItem))
       }
+      if (!this.item.formatterCfg) {
+        this.item.formatterCfg = JSON.parse(JSON.stringify(this.formatterItem))
+      }
     },
     isEnableCompare() {
-      const xAxis = JSON.parse(this.chart.xaxis)
+      let xAxis = null
+      if (Object.prototype.toString.call(this.chart.xaxis) === '[object Array]') {
+        xAxis = JSON.parse(JSON.stringify(this.chart.xaxis))
+      } else {
+        xAxis = JSON.parse(this.chart.xaxis)
+      }
       const t1 = xAxis.filter(ele => {
         return ele.deType === 1
       })
       // 暂时只支持类别轴/维度的时间类型字段
-      if (t1.length > 0 && this.chart.type !== 'text' && this.chart.type !== 'gauge' && this.chart.type !== 'liquid') {
+      if (t1.length > 0 && this.chart.type !== 'text' && this.chart.type !== 'label' && this.chart.type !== 'gauge' && this.chart.type !== 'liquid') {
         this.disableEditCompare = false
       } else {
         this.disableEditCompare = true
@@ -198,6 +218,9 @@ export default {
         case 'filter':
           this.editFilter()
           break
+        case 'formatter':
+          this.valueFormatter()
+          break
         default:
           break
       }
@@ -209,7 +232,6 @@ export default {
     },
 
     summary(param) {
-      // console.log(param)
       this.item.summary = param.type
       this.$emit('onQuotaItemChange', this.item)
     },
@@ -220,7 +242,6 @@ export default {
     },
 
     switchChartType(param) {
-      // console.log(param)
       this.item.chartType = param.type
       this.$emit('onQuotaItemChange', this.item)
     },
@@ -250,7 +271,6 @@ export default {
     },
 
     sort(param) {
-      // console.log(param)
       this.item.sort = param.type
       this.$emit('onQuotaItemChange', this.item)
     },
@@ -262,6 +282,7 @@ export default {
     showRename() {
       this.item.index = this.index
       this.item.renameType = 'quota'
+      this.item.dsFieldName = getOriginFieldName(this.dimensionData, this.quotaData, this.item)
       this.$emit('onNameEdit', this.item)
     },
     removeItem() {
@@ -282,6 +303,12 @@ export default {
     },
     getItemTagType() {
       this.tagType = getItemType(this.dimensionData, this.quotaData, this.item)
+    },
+
+    valueFormatter() {
+      this.item.index = this.index
+      this.item.formatterType = 'quota'
+      this.$emit('valueFormatter', this.item)
     }
   }
 }
@@ -319,7 +346,7 @@ export default {
     margin-left: 4px;
     color: #878d9f;
     position: absolute;
-    right: 25px;
+    right: 40px;
   }
 
   .inner-dropdown-menu{
@@ -331,7 +358,7 @@ export default {
 
   .item-span-style{
     display: inline-block;
-    width: 50px;
+    width: 80px;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;

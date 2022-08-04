@@ -138,6 +138,15 @@
             diskPersistent="false"
     />
 
+    <cache
+            name="sys_map_areas_global"
+            eternal="true"
+            maxElementsInMemory="100"
+            maxElementsOnDisk="3000"
+            overflowToDisk="true"
+            diskPersistent="false"
+    />
+
 
     <!--用户授权数据源缓存-->
     <cache
@@ -240,6 +249,17 @@
     <!--组织授权仪表板缓存-->
     <cache
             name="dept_panel"
+            eternal="false"
+            maxElementsInMemory="100"
+            maxElementsOnDisk="1000"
+            overflowToDisk="true"
+            diskPersistent="true"
+            timeToIdleSeconds="1800"
+            timeToLiveSeconds="3600"
+            memoryStoreEvictionPolicy="LRU"
+    />
+    <cache
+            name="ENGINE"
             eternal="false"
             maxElementsInMemory="100"
             maxElementsOnDisk="1000"

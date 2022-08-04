@@ -22,7 +22,6 @@
         />
         <!--视图详情-->
         <el-dialog
-          :title="'['+showChartInfo.name+']'+$t('chart.chart_details')"
           :visible.sync="chartDetailsVisible"
           width="70%"
           class="dialog-css"
@@ -178,6 +177,7 @@ export default {
     _this.canvasStyleDataInit()
   },
   beforeDestroy() {
+    eventBus.$off('openChartDetailsDialog', this.openChartDetailsDialog)
     clearInterval(this.timer)
   },
   methods: {
@@ -285,15 +285,15 @@ export default {
     padding: 5px;
   }
 
-  .dialog-css > > > .el-dialog__title {
+  .dialog-css ::v-deep .el-dialog__title {
     font-size: 14px;
   }
 
-  .dialog-css > > > .el-dialog__header {
-    padding: 20px 20px 0;
+  .dialog-css ::v-deep .el-dialog__header {
+    padding: 40px 20px 0;
   }
 
-  .dialog-css > > > .el-dialog__body {
+  .dialog-css ::v-deep .el-dialog__body {
     padding: 10px 20px 20px;
   }
 

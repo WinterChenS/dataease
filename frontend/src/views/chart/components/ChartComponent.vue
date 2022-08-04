@@ -74,7 +74,6 @@ import {
 import {
   baseMixOption
 } from '@/views/chart/chart/mix/mix'
-// import eventBus from '@/components/canvas/utils/eventBus'
 import {
   uuid
 } from 'vue-uuid'
@@ -115,6 +114,16 @@ export default {
     terminalType: {
       type: String,
       default: 'pc'
+    },
+    scale: {
+      type: Number,
+      required: false,
+      default: 1
+    },
+    themeStyle: {
+      type: Object,
+      required: false,
+      default: null
     }
   },
   data() {
@@ -128,10 +137,10 @@ export default {
         top: '0px'
       },
       pointParam: null,
-
       dynamicAreaCode: null,
       borderRadius: '0px',
-      mapCenter: null
+      mapCenter: null,
+      linkageActiveParam: null
     }
   },
 
@@ -158,6 +167,17 @@ export default {
     this.myChart.dispose()
   },
   methods: {
+    reDrawView() {
+      this.myChart.dispatchAction({ type: 'unselect', seriesIndex: this.linkageActiveParam.seriesIndex, name: this.linkageActiveParam.name })
+      this.myChart.dispatchAction({ type: 'downplay', seriesIndex: this.linkageActiveParam.seriesIndex, name: this.linkageActiveParam.name })
+      this.linkageActiveParam = null
+    },
+    linkageActive() {
+      if (this.linkageActiveParam) {
+        this.myChart.dispatchAction({ type: 'select', seriesIndex: this.linkageActiveParam.seriesIndex, name: this.linkageActiveParam.name })
+        this.myChart.dispatchAction({ type: 'highlight', seriesIndex: this.linkageActiveParam.seriesIndex, name: this.linkageActiveParam.name })
+      }
+    },
     preDraw() {
       // 基于准备好的dom，初始化echarts实例
       // 渲染echart等待dom加载完毕,渲染之前先尝试销毁具有相同id的echart 放置多次切换仪表板有重复id情况
@@ -175,6 +195,13 @@ export default {
         this.myChart.off('click')
         this.myChart.on('click', function(param) {
           that.pointParam = param
+          if (that.linkageActiveParam) {
+            that.reDrawView()
+          }
+          that.linkageActiveParam = {
+            seriesIndex: that.pointParam.seriesIndex,
+            name: that.pointParam.name
+          }
           if (that.trackMenu.length < 2) { // 只有一个事件直接调用
             that.trackClick(that.trackMenu[0])
           } else { // 视图关联多个事件
@@ -185,7 +212,7 @@ export default {
         })
       })
     },
-    drawEcharts() {
+    drawEcharts(activeParam) {
       const chart = this.chart
       let chart_option = {}
       // type
@@ -210,7 +237,7 @@ export default {
       } else if (chart.type === 'radar') {
         chart_option = baseRadarOption(JSON.parse(JSON.stringify(BASE_RADAR)), chart)
       } else if (chart.type === 'gauge') {
-        chart_option = baseGaugeOption(JSON.parse(JSON.stringify(BASE_GAUGE)), chart)
+        chart_option = baseGaugeOption(JSON.parse(JSON.stringify(BASE_GAUGE)), chart, this.terminalType === 'pc' ? this.scale : '0.7')
       } else if (chart.type === 'scatter') {
         chart_option = baseScatterOption(JSON.parse(JSON.stringify(BASE_SCATTER)), chart, this.terminalType)
       } else if (chart.type === 'treemap') {
@@ -218,21 +245,19 @@ export default {
       } else if (chart.type === 'chart-mix') {
         chart_option = baseMixOption(JSON.parse(JSON.stringify(BASE_MIX)), chart)
       }
-      // console.log(JSON.stringify(chart_option))
       if (this.myChart && this.searchCount > 0) {
         chart_option.animation = false
       }
-
       if (chart.type === 'map') {
         const customAttr = JSON.parse(chart.customAttr)
         if (!customAttr.areaCode) {
           this.myChart.clear()
           return
         }
-        const cCode = this.dynamicAreaCode || customAttr.areaCode
+        const cCode = this.chart.DetailAreaCode || this.dynamicAreaCode || customAttr.areaCode
         if (this.$store.getters.geoMap[cCode]) {
           const json = this.$store.getters.geoMap[cCode]
-          this.initMapChart(json, chart)
+          this.initMapChart(json, chart, cCode)
           return
         }
 
@@ -241,41 +266,33 @@ export default {
             key: cCode,
             value: res
           }).then(() => {
-            this.initMapChart(res, chart)
+            this.initMapChart(res, chart, cCode)
           })
         })
         return
       }
       this.myEcharts(chart_option)
+      this.$nextTick(() => (this.linkageActive()))
     },
     registerDynamicMap(areaCode) {
       this.dynamicAreaCode = areaCode
-      //   if (this.$store.getters.geoMap[areaCode]) {
-      //     const json = this.$store.getters.geoMap[areaCode]
-      //     this.myChart.dispose()
-      //     this.myChart = this.$echarts.getInstanceByDom(document.getElementById(this.chartId))
-      //     this.$echarts.registerMap('MAP', json)
-      //     return
-      //   }
-      //   geoJson(areaCode).then(res => {
-      //     this.$store.dispatch('map/setGeo', {
-      //       key: areaCode,
-      //       value: res
-      //     }).then(() => {
-      //       this.myChart.dispose()
-      //       this.myChart = this.$echarts.getInstanceByDom(document.getElementById(this.chartId))
-      //       this.$echarts.registerMap('MAP', res)
-      //     })
-      //   }).catch(() => {
-      //     this.downOrUp = true
-      //   })
     },
-
-    initMapChart(geoJson, chart) {
+    formatGeoJson(geoGson) {
+      geoGson.features.forEach(feature => {
+        Object.keys(feature.properties).forEach(property => {
+          feature.properties[property.toLocaleLowerCase()] = feature.properties[property]
+        })
+      })
+    },
+    initMapChart(geoJson, chart, curAreaCode) {
+      this.formatGeoJson(geoJson)
       this.$echarts.registerMap('MAP', geoJson)
-      // this.$echarts.getMap('MAP') || this.$echarts.registerMap('MAP', geoJson)
       const base_json = JSON.parse(JSON.stringify(BASE_MAP))
-      const chart_option = baseMapOption(base_json, chart)
+      let themeStyle = null
+      if (this.themeStyle) {
+        themeStyle = JSON.parse(JSON.stringify(this.themeStyle))
+      }
+      const chart_option = baseMapOption(base_json, chart, themeStyle, curAreaCode)
       this.myEcharts(chart_option)
       const opt = this.myChart.getOption()
       if (opt && opt.series) {
@@ -321,23 +338,29 @@ export default {
         }
         return
       }
+      const quotaList = this.pointParam.data.quotaList
+      quotaList[0]['value'] = this.pointParam.data.value
       const linkageParam = {
         option: 'linkage',
+        name: this.pointParam.data.name,
         viewId: this.chart.id,
         dimensionList: this.pointParam.data.dimensionList,
-        quotaList: this.pointParam.data.quotaList
+        quotaList: quotaList
       }
       const jumpParam = {
         option: 'jump',
+        name: this.pointParam.data.name,
         viewId: this.chart.id,
         dimensionList: this.pointParam.data.dimensionList,
-        quotaList: this.pointParam.data.quotaList
+        quotaList: quotaList
       }
+      jumpParam.quotaList[0]['value'] = this.pointParam.data.value
       switch (trackAction) {
         case 'drill':
           this.$emit('onChartClick', this.pointParam)
           break
         case 'linkage':
+          this.linkageActive()
           this.$store.commit('addViewTrackFilter', linkageParam)
           break
         case 'jump':
@@ -373,7 +396,7 @@ export default {
 <style scoped>
   .map-zoom-box {
     position: absolute;
-    z-index: 999;
+    z-index: 0;
     left: 2%;
     bottom: 30px;
     box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);

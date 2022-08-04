@@ -45,10 +45,10 @@ export default {
     float:right;
     z-index: 2;
     border-radius:2px;
-    padding-left: 5px;
-    padding-right: 2px;
+    padding-left: 3px;
+    padding-right: 0px;
     cursor:pointer!important;
-    background-color: #0a7be0;
+    background-color: #3370ff;
   }
   .bar-main i{
     color: white;

@@ -2,7 +2,10 @@
   <div ref="chartContainer" style="padding: 0;width: 100%;height: 100%;overflow: hidden;" :style="bg_class">
     <view-track-bar ref="viewTrack" :track-menu="trackMenu" class="track-bar" :style="trackBarStyleTime" @trackClick="trackClick" />
     <span v-if="chart.type && antVRenderStatus" v-show="title_show" ref="title" :style="title_class" style="cursor: default;display: block;">
-      <p style="padding:6px 10px 0 10px;margin: 0;overflow: hidden;white-space: pre;text-overflow: ellipsis;">{{ chart.title }}</p>
+      <div>
+        <p style="padding:6px 4px 0;margin: 0;overflow: hidden;white-space: pre;text-overflow: ellipsis;display: inline;">{{ chart.title }}</p>
+        <title-remark v-if="remarkCfg.show" style="text-shadow: none!important;" :remark-cfg="remarkCfg" />
+      </div>
     </span>
     <div :id="chartId" style="width: 100%;overflow: hidden;" :style="{height:chartHeight}" />
   </div>
@@ -12,7 +15,7 @@
 import { baseLiquid } from '@/views/chart/chart/liquid/liquid'
 import { uuid } from 'vue-uuid'
 import ViewTrackBar from '@/components/canvas/components/Editor/ViewTrackBar'
-import { hexColorToRGBA } from '@/views/chart/chart/util'
+import { getRemark, hexColorToRGBA } from '@/views/chart/chart/util'
 import { baseBarOptionAntV, hBaseBarOptionAntV } from '@/views/chart/chart/bar/bar_antv'
 import { baseAreaOptionAntV, baseLineOptionAntV } from '@/views/chart/chart/line/line_antv'
 import { basePieOptionAntV, basePieRoseOptionAntV } from '@/views/chart/chart/pie/pie_antv'
@@ -23,10 +26,12 @@ import { baseTreemapOptionAntV } from '@/views/chart/chart/treemap/treemap_antv'
 import { baseRadarOptionAntV } from '@/views/chart/chart/radar/radar_antv'
 import { baseWaterfallOptionAntV } from '@/views/chart/chart/waterfall/waterfall'
 import { baseWordCloudOptionAntV } from '@/views/chart/chart/wordCloud/word_cloud'
+import TitleRemark from '@/views/chart/view/TitleRemark'
+import { DEFAULT_TITLE_STYLE } from '@/views/chart/chart/chart'
 
 export default {
   name: 'ChartComponentG2',
-  components: { ViewTrackBar },
+  components: { TitleRemark, ViewTrackBar },
   props: {
     chart: {
       type: Object,
@@ -50,6 +55,11 @@ export default {
       type: Number,
       required: false,
       default: 0
+    },
+    scale: {
+      type: Number,
+      required: false,
+      default: 1
     }
   },
   data() {
@@ -74,10 +84,17 @@ export default {
         textAlign: 'left',
         fontStyle: 'normal',
         fontWeight: 'normal',
-        background: hexColorToRGBA('#ffffff', 0)
+        background: ''
       },
       title_show: true,
-      antVRenderStatus: false
+      antVRenderStatus: false,
+      linkageActiveParam: null,
+      linkageActiveHistory: false,
+      remarkCfg: {
+        show: false,
+        content: ''
+      }
+
     }
   },
 
@@ -110,6 +127,43 @@ export default {
     this.preDraw()
   },
   methods: {
+    reDrawView() {
+      this.linkageActiveHistory = false
+      this.myChart.render()
+    },
+    linkageActivePre() {
+      if (this.linkageActiveHistory) {
+        this.reDrawView()
+      }
+      this.$nextTick(() => {
+        this.linkageActive()
+      })
+    },
+    linkageActive() {
+      this.linkageActiveHistory = true
+      this.myChart.setState('active', (param) => {
+        if (Array.isArray(param)) {
+          return false
+        } else {
+          if (this.checkSelected(param)) {
+            return true
+          }
+        }
+      })
+      this.myChart.setState('inactive', (param) => {
+        if (Array.isArray(param)) {
+          return false
+        } else {
+          if (!this.checkSelected(param)) {
+            return true
+          }
+        }
+      })
+    },
+    checkSelected(param) {
+      return (this.linkageActiveParam.name.indexOf(param.name) > -1) &&
+        (this.linkageActiveParam.category === param.category)
+    },
     preDraw() {
       this.initTitle()
       this.calcHeightDelay()
@@ -153,7 +207,7 @@ export default {
       } else if (chart.type === 'radar') {
         this.myChart = baseRadarOptionAntV(this.myChart, this.chartId, chart, this.antVAction)
       } else if (chart.type === 'gauge') {
-        this.myChart = baseGaugeOptionAntV(this.myChart, this.chartId, chart, this.antVAction)
+        this.myChart = baseGaugeOptionAntV(this.myChart, this.chartId, chart, this.antVAction, this.scale)
       } else if (chart.type === 'pie') {
         this.myChart = basePieOptionAntV(this.myChart, this.chartId, chart, this.antVAction)
       } else if (chart.type === 'pie-rose') {
@@ -175,22 +229,28 @@ export default {
         }
       }
 
-      if (this.myChart && this.searchCount > 0) {
+      if (this.myChart && chart.type !== 'liquid' && this.searchCount > 0) {
         this.myChart.options.animation = false
       }
 
       if (this.antVRenderStatus) {
         this.myChart.render()
+        if (this.linkageActiveHistory) {
+          this.linkageActive()
+        }
       }
       this.setBackGroundBorder()
     },
 
     antVAction(param) {
-      console.log(param)
       if (this.chart.type === 'treemap') {
         this.pointParam = param.data.data
       } else {
         this.pointParam = param.data
+      }
+      this.linkageActiveParam = {
+        category: this.pointParam.data.category ? this.pointParam.data.category : 'NO_DATA',
+        name: this.pointParam.data.name ? this.pointParam.data.name : 'NO_DATA'
       }
       if (this.trackMenu.length < 2) { // 只有一个事件直接调用
         this.trackClick(this.trackMenu[0])
@@ -220,23 +280,29 @@ export default {
         }
         return
       }
+      const quotaList = this.pointParam.data.quotaList
+      quotaList[0]['value'] = this.pointParam.data.value
       const linkageParam = {
         option: 'linkage',
+        name: this.pointParam.data.name,
         viewId: this.chart.id,
         dimensionList: this.pointParam.data.dimensionList,
-        quotaList: this.pointParam.data.quotaList
+        quotaList: quotaList
       }
       const jumpParam = {
         option: 'jump',
+        name: this.pointParam.data.name,
         viewId: this.chart.id,
         dimensionList: this.pointParam.data.dimensionList,
-        quotaList: this.pointParam.data.quotaList
+        quotaList: quotaList
       }
+
       switch (trackAction) {
         case 'drill':
           this.$emit('onChartClick', this.pointParam)
           break
         case 'linkage':
+          this.linkageActivePre()
           this.$store.commit('addViewTrackFilter', linkageParam)
           break
         case 'jump':
@@ -257,12 +323,17 @@ export default {
           this.title_class.textAlign = customStyle.text.hPosition
           this.title_class.fontStyle = customStyle.text.isItalic ? 'italic' : 'normal'
           this.title_class.fontWeight = customStyle.text.isBolder ? 'bold' : 'normal'
+
+          this.title_class.fontFamily = customStyle.text.fontFamily ? customStyle.text.fontFamily : DEFAULT_TITLE_STYLE.fontFamily
+          this.title_class.letterSpacing = (customStyle.text.letterSpace ? customStyle.text.letterSpace : DEFAULT_TITLE_STYLE.letterSpace) + 'px'
+          this.title_class.textShadow = customStyle.text.fontShadow ? '2px 2px 4px' : 'none'
         }
         if (customStyle.background) {
           this.title_class.background = hexColorToRGBA(customStyle.background.color, customStyle.background.alpha)
           this.borderRadius = (customStyle.background.borderRadius || 0) + 'px'
         }
       }
+      this.initRemark()
     },
 
     calcHeightRightNow() {
@@ -280,6 +351,9 @@ export default {
       setTimeout(() => {
         this.calcHeightRightNow()
       }, 100)
+    },
+    initRemark() {
+      this.remarkCfg = getRemark(this.chart)
     }
   }
 }

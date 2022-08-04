@@ -1,14 +1,43 @@
+export const DEFAULT_TAB_COLOR_CASE_DARK = {
+  headFontColor: '#FFFFFF',
+  headFontActiveColor: '#FFFFFF',
+  headBorderColor: '',
+  headBorderActiveColor: ''
+}
+
+export const DEFAULT_TAB_COLOR_CASE_LIGHT = {
+  headFontColor: '#OOOOOO',
+  headFontActiveColor: '#OOOOOO',
+  headBorderColor: '',
+  headBorderActiveColor: ''
+}
+
 export const DEFAULT_COLOR_CASE = {
   value: 'default',
   colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc'],
   alpha: 100,
-  tableHeaderBgColor: '#e1eaff',
-  tableItemBgColor: '#ffffff',
+  tableHeaderBgColor: '#6D9A49',
+  tableItemBgColor: '#FFFFFF',
   tableFontColor: '#000000',
   tableStripe: true,
   dimensionColor: '#000000',
-  quotaColor: '#000000',
-  tableBorderColor: '#cfdaf4'
+  quotaColor: '#4E81BB',
+  tableBorderColor: '#E6E7E4',
+  seriesColors: [] // 格式：{"name":"s1","color":"","isCustom":false}
+}
+
+export const DEFAULT_COLOR_CASE_DARK = {
+  value: 'default',
+  colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc'],
+  alpha: 100,
+  tableHeaderBgColor: '#4E81BB',
+  tableItemBgColor: '#131E42',
+  tableFontColor: '#ffffff',
+  tableStripe: true,
+  dimensionColor: '#ffffff',
+  quotaColor: '#4E81BB',
+  tableBorderColor: '#CCCCCC',
+  seriesColors: [] // 格式：{"name":"s1","color":"","isCustom":false}
 }
 export const DEFAULT_SIZE = {
   barDefault: true,
@@ -40,11 +69,22 @@ export const DEFAULT_SIZE = {
   gaugeMax: 100,
   gaugeStartAngle: 225,
   gaugeEndAngle: -45,
+  gaugeTickCount: 5,
   dimensionFontSize: 18,
   quotaFontSize: 18,
   spaceSplit: 10,
   dimensionShow: true,
   quotaShow: true,
+  quotaFontFamily: 'Microsoft YaHei',
+  quotaFontIsBolder: false,
+  quotaFontIsItalic: false,
+  quotaLetterSpace: '0',
+  quotaFontShadow: false,
+  dimensionFontFamily: 'Microsoft YaHei',
+  dimensionFontIsBolder: false,
+  dimensionFontIsItalic: false,
+  dimensionLetterSpace: '0',
+  dimensionFontShadow: false,
   scatterSymbol: 'circle',
   scatterSymbolSize: 20,
   treemapWidth: 80,
@@ -55,7 +95,10 @@ export const DEFAULT_SIZE = {
   liquidOutlineDistance: 8,
   liquidWaveLength: 128,
   liquidWaveCount: 3,
-  liquidShape: 'circle'
+  liquidShape: 'circle',
+  tablePageMode: 'page',
+  symbolOpacity: 0.7,
+  symbolStrokeWidth: 2
 }
 export const DEFAULT_LABEL = {
   show: false,
@@ -66,6 +109,13 @@ export const DEFAULT_LABEL = {
   gaugeFormatter: '{value}',
   labelLine: {
     show: true
+  },
+  gaugeLabelFormatter: {
+    type: 'value', // auto,value,percent
+    unit: 1, // 换算单位
+    suffix: '', // 单位后缀
+    decimalCount: 2, // 小数位数
+    thousandSeparator: true// 千分符
   }
 }
 export const DEFAULT_TOOLTIP = {
@@ -76,17 +126,73 @@ export const DEFAULT_TOOLTIP = {
     fontSize: '10',
     color: '#909399'
   },
-  formatter: ''
+  formatter: '',
+  backgroundColor: '#ffffff'
+}
+export const DEFAULT_TOTAL = {
+  row: {
+    showGrandTotals: true,
+    showSubTotals: true,
+    reverseLayout: false,
+    reverseSubLayout: false,
+    label: '总计',
+    subLabel: '小计',
+    subTotalsDimensions: [],
+    calcTotals: {
+      aggregation: 'SUM'
+    },
+    calcSubTotals: {
+      aggregation: 'SUM'
+    }
+  },
+  col: {
+    showGrandTotals: true,
+    showSubTotals: true,
+    reverseLayout: false,
+    reverseSubLayout: false,
+    label: '总计',
+    subLabel: '小计',
+    subTotalsDimensions: [],
+    calcTotals: {
+      aggregation: 'SUM'
+    },
+    calcSubTotals: {
+      aggregation: 'SUM'
+    }
+  }
 }
 export const DEFAULT_TITLE_STYLE = {
   show: true,
   fontSize: '18',
-  color: '#303133',
-  hPosition: 'center',
+  color: '#000000',
+  hPosition: 'left',
   vPosition: 'top',
   isItalic: false,
-  isBolder: false
+  isBolder: true,
+  remarkShow: false,
+  remark: '',
+  remarkBackgroundColor: '#ffffffff',
+  fontFamily: 'Microsoft YaHei',
+  letterSpace: '0',
+  fontShadow: false
 }
+
+export const DEFAULT_TITLE_STYLE_DARK = {
+  show: true,
+  fontSize: '18',
+  color: '#FFFFFF',
+  hPosition: 'left',
+  vPosition: 'top',
+  isItalic: false,
+  isBolder: true,
+  remarkShow: false,
+  remark: '',
+  remarkBackgroundColor: '#ffffffff',
+  fontFamily: 'Microsoft YaHei',
+  letterSpace: '0',
+  fontShadow: false
+}
+
 export const DEFAULT_LEGEND_STYLE = {
   show: true,
   hPosition: 'center',
@@ -127,6 +233,13 @@ export const DEFAULT_XAXIS_STYLE = {
     max: null,
     split: null,
     splitCount: null
+  },
+  axisLabelFormatter: {
+    type: 'auto', // auto,value,percent
+    unit: 1, // 换算单位
+    suffix: '', // 单位后缀
+    decimalCount: 2, // 小数位数
+    thousandSeparator: true// 千分符
   }
 }
 export const DEFAULT_YAXIS_STYLE = {
@@ -158,6 +271,13 @@ export const DEFAULT_YAXIS_STYLE = {
     max: null,
     split: null,
     splitCount: null
+  },
+  axisLabelFormatter: {
+    type: 'auto', // auto,value,percent
+    unit: 1, // 换算单位
+    suffix: '', // 单位后缀
+    decimalCount: 2, // 小数位数
+    thousandSeparator: true// 千分符
   }
 }
 export const DEFAULT_YAXIS_EXT_STYLE = {
@@ -189,12 +309,19 @@ export const DEFAULT_YAXIS_EXT_STYLE = {
     max: null,
     split: null,
     splitCount: null
+  },
+  axisLabelFormatter: {
+    type: 'auto', // auto,value,percent
+    unit: 1, // 换算单位
+    suffix: '', // 单位后缀
+    decimalCount: 2, // 小数位数
+    thousandSeparator: true// 千分符
   }
 }
 export const DEFAULT_BACKGROUND_COLOR = {
   color: '#ffffff',
-  alpha: 100,
-  borderRadius: 5
+  alpha: 0,
+  borderRadius: 0
 }
 export const DEFAULT_SPLIT = {
   name: {
@@ -245,7 +372,14 @@ export const DEFAULT_FUNCTION_CFG = {
   sliderRange: [0, 10]
 }
 export const DEFAULT_THRESHOLD = {
-  gaugeThreshold: ''
+  gaugeThreshold: '',
+  labelThreshold: [],
+  tableThreshold: []
+}
+export const DEFAULT_SCROLL = {
+  open: false,
+  row: 1,
+  interval: 2000
 }
 // chart config
 export const BASE_BAR = {
@@ -489,10 +623,6 @@ export const BASE_FUNNEL = {
       maxSize: '100%',
       sort: 'descending',
       gap: 1,
-      // label: {
-      //   show: true,
-      //   position: 'inside'
-      // },
       labelLine: {
         length: 10,
         lineStyle: {
@@ -640,8 +770,7 @@ export const BASE_CHART_STRING = {
     legend: DEFAULT_LEGEND_STYLE,
     xAxis: DEFAULT_XAXIS_STYLE,
     yAxis: DEFAULT_YAXIS_STYLE,
-    yAxisExt: DEFAULT_YAXIS_EXT_STYLE,
-    background: DEFAULT_BACKGROUND_COLOR
+    yAxisExt: DEFAULT_YAXIS_EXT_STYLE
   }),
   customFilter: '[]'
 }
@@ -664,8 +793,7 @@ export const BASE_CHART = {
     legend: DEFAULT_LEGEND_STYLE,
     xAxis: DEFAULT_XAXIS_STYLE,
     yAxis: DEFAULT_YAXIS_STYLE,
-    yAxisExt: DEFAULT_YAXIS_EXT_STYLE,
-    background: DEFAULT_BACKGROUND_COLOR
+    yAxisExt: DEFAULT_YAXIS_EXT_STYLE
   },
   customFilter: []
 }
@@ -688,18 +816,15 @@ export const BASE_MAP = {
     inRange: {
       color: ['lightskyblue', 'yellow', 'orangered']
     },
+    textStyle: {},
     right: 0
   },
-  //   legend: {},
   series: [
     {
       name: '',
       type: 'map',
       map: 'MAP',
       roam: true,
-      //   label: {
-      //     show: true
-      //   },
       data: []
     }
   ]
@@ -791,15 +916,6 @@ export const BASE_TREEMAP = {
       breadcrumb: {
         show: false
       },
-      // radius: ['0%', '60%'],
-      // avoidLabelOverlap: false,
-      // emphasis: {
-      //   itemStyle: {
-      //     shadowBlur: 10,
-      //     shadowOffsetX: 0,
-      //     shadowColor: 'rgba(0, 0, 0, 0.5)'
-      //   }
-      // },
       data: []
     }
   ]
@@ -878,4 +994,31 @@ export const COLOR_PANEL = [
   '#999999',
   '#000000',
   '#FFFFFF'
+]
+
+export const BASE_ECHARTS_SELECT = {
+  itemStyle: {
+    shadowBlur: 2
+  }
+}
+
+export const CHART_FONT_FAMILY = [
+  { name: '微软雅黑', value: 'Microsoft YaHei' },
+  { name: '宋体', value: 'SimSun' },
+  { name: '黑体', value: 'SimHei' },
+  { name: '楷体', value: 'KaiTi' }
+]
+
+export const CHART_FONT_LETTER_SPACE = [
+  { name: '0px', value: '0' },
+  { name: '1px', value: '1' },
+  { name: '2px', value: '2' },
+  { name: '3px', value: '3' },
+  { name: '4px', value: '4' },
+  { name: '5px', value: '5' },
+  { name: '6px', value: '6' },
+  { name: '7px', value: '7' },
+  { name: '8px', value: '8' },
+  { name: '9px', value: '9' },
+  { name: '10px', value: '10' }
 ]

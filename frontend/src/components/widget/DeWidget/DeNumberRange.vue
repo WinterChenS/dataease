@@ -3,11 +3,11 @@
   <el-form v-if="element.options!== null && element.options.attrs!==null" ref="form" :model="form" :rules="rules">
     <div class="de-number-range-container">
       <el-form-item prop="min">
-        <el-input v-model="form.min" :placeholder="$t(element.options.attrs.placeholder_min)" :size="size" @input="inputChange" @change="handleMinChange" />
+        <el-input ref="de-number-range-min" v-model="form.min" :placeholder="$t(element.options.attrs.placeholder_min)" :size="size" @input="inputChange" @change="handleMinChange" />
       </el-form-item>
       <span>{{ $t('denumberrange.split_placeholder') }}</span>
       <el-form-item prop="max">
-        <el-input v-model="form.max" :placeholder="$t(element.options.attrs.placeholder_max)" :size="size" @input="inputChange" @change="handleMaxChange" />
+        <el-input ref="de-number-range-max" v-model="form.max" :placeholder="$t(element.options.attrs.placeholder_max)" :size="size" @input="inputChange" @change="handleMaxChange" />
       </el-form-item>
     </div>
   </el-form>
@@ -29,7 +29,11 @@ export default {
       type: Boolean,
       default: true
     },
-    size: String
+    size: String,
+    isRelation: {
+      type: Boolean,
+      default: false
+    }
   },
 
   data() {
@@ -104,7 +108,15 @@ export default {
     }
   },
   mounted() {
-    bus.$on('reset-default-value', id => {
+    if (this.inDraw) {
+      bus.$on('reset-default-value', this.resetDefaultValue)
+    }
+  },
+  beforeDestroy() {
+    bus.$off('reset-default-value', this.resetDefaultValue)
+  },
+  methods: {
+    resetDefaultValue(id) {
       if (this.inDraw && this.manualModify && this.element.id === id) {
         const values = this.element.options.value
         this.form.min = values[0]
@@ -113,9 +125,7 @@ export default {
         }
         this.search()
       }
-    })
-  },
-  methods: {
+    },
     searchWithKey(index) {
       this.timeMachine = setTimeout(() => {
         if (index === this.changeIndex) {
@@ -188,33 +198,53 @@ export default {
         })
       })
     },
-    setCondition() {
+    getCondition() {
       const param = {
         component: this.element,
-        // value: !this.values ? [] : Array.isArray(this.values) ? this.values : [this.values],
         value: [this.form.min, this.form.max],
         operator: this.operator
       }
+      if (this.form.min && this.form.max) {
+        return param
+      }
+      if (!this.form.min && !this.form.max) {
+        param.value = []
+        return param
+      }
+      if (this.form.min) {
+        param.value = [this.form.min]
+        param.operator = 'ge'
+        return param
+      }
+      if (this.form.max) {
+        param.value = [this.form.max]
+        param.operator = 'le'
+        return param
+      }
+      return param
+    },
+    setCondition() {
+      const param = this.getCondition()
 
       if (this.form.min && this.form.max) {
-        this.inDraw && this.$store.commit('addViewFilter', param)
+        !this.isRelation && this.inDraw && this.$store.commit('addViewFilter', param)
         return
       }
       if (!this.form.min && !this.form.max) {
         param.value = []
-        this.inDraw && this.$store.commit('addViewFilter', param)
+        !this.isRelation && this.inDraw && this.$store.commit('addViewFilter', param)
         return
       }
       if (this.form.min) {
         param.value = [this.form.min]
         param.operator = 'ge'
-        this.inDraw && this.$store.commit('addViewFilter', param)
+        !this.isRelation && this.inDraw && this.$store.commit('addViewFilter', param)
         return
       }
       if (this.form.max) {
         param.value = [this.form.max]
         param.operator = 'le'
-        this.inDraw && this.$store.commit('addViewFilter', param)
+        !this.isRelation && this.inDraw && this.$store.commit('addViewFilter', param)
         return
       }
     },

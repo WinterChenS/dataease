@@ -11,6 +11,7 @@ import {
 } from '@/views/chart/chart/common/common_antv'
 
 import { Scatter } from '@antv/g2plot'
+import { antVCustomColor } from '@/views/chart/chart/util'
 
 export function baseScatterOptionAntV(plot, container, chart, action) {
   // theme
@@ -47,12 +48,6 @@ export function baseScatterOptionAntV(plot, container, chart, action) {
     },
     interactions: [
       {
-        type: 'element-active', cfg: {
-          start: [{ trigger: 'element:mouseenter', action: ['element-highlight:highlight', 'element-active:reset', 'cursor:pointer'] }],
-          end: [{ trigger: 'element:mouseleave', action: ['element-highlight:reset', 'element-active:reset', 'cursor:default'] }]
-        }
-      },
-      {
         type: 'legend-active', cfg: {
           start: [{ trigger: 'legend-item:mouseenter', action: ['element-active:reset'] }],
           end: [{ trigger: 'legend-item:mouseleave', action: ['element-active:reset'] }]
@@ -86,6 +81,8 @@ export function baseScatterOptionAntV(plot, container, chart, action) {
       options.shape = s.scatterSymbol
     }
   }
+  // custom color
+  options.color = antVCustomColor(chart)
 
   // 开始渲染
   if (plot) {

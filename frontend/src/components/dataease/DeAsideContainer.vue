@@ -1,16 +1,17 @@
 <template>
   <el-aside
-    :width="width"
+    :width="currentWidth"
     class="ms-aside-container"
-    :style="{'margin-left': !asideHidden ? 0 : '-' + width}"
+    :style="{'margin-left': !asideHidden ? 0 : '-' + currentWidth}"
   >
     <slot />
-    <de-horizontal-drag-bar v-if="showDragBar" />
+    <de-horizontal-drag-bar v-if="isSystem" :type="type" />
   </el-aside>
 </template>
 
 <script>
 import DeHorizontalDragBar from './dragbar/DeLeft2RightDragBar'
+import { getLayout } from '@/utils/LayoutUtil'
 export default {
   name: 'DeAsideContainer',
   components: { DeHorizontalDragBar },
@@ -19,6 +20,10 @@ export default {
       type: String,
       default: '260px'
     },
+    isCollapseWidth: {
+      type: String,
+      default: ''
+    },
     enableAsideHidden: {
       type: Boolean,
       default: true
@@ -26,11 +31,28 @@ export default {
     showDragBar: {
       type: Boolean,
       default: true
+    },
+    isTemplate: {
+      type: Boolean,
+      default: false
+    },
+    type: {
+      type: String,
+      default: null
     }
   },
   data() {
     return {
       asideHidden: false
+    }
+  },
+  computed: {
+    currentWidth() {
+      return this.isCollapseWidth || this.type && getLayout(this.type) || this.width
+    },
+    isSystem() {
+      // 系统管理不需要拖拽菜单
+      return this.isTemplate || (!this.$route.fullPath.includes('system') && this.showDragBar)
     }
   }
 }
@@ -40,14 +62,18 @@ export default {
 
   .ms-aside-container {
     /* border: 1px solid #E6E6E6; */
-    padding: 10px;
     border-radius: 2px;
     box-sizing: border-box;
     background-color: var(--SiderBG, #FFF);
     height: calc(100vh - 56px);
     border-right: 0px;
     position: relative;
+    padding-bottom: 50px;
   }
+
+  /* .collapse-style {
+    height: calc(100vh - 56px);
+  } */
 
   .hiddenBottom {
     width: 8px;

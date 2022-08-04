@@ -64,7 +64,6 @@ public class HttpClientUtil {
             throw new RuntimeException("HttpClient构建失败", e);
         }
     }
-
     /**
      * Get http请求
      *
@@ -86,9 +85,6 @@ public class HttpClientUtil {
             for (String key : header.keySet()) {
                 httpGet.addHeader(key, header.get(key));
             }
-
-            httpGet.addHeader(HTTP.CONTENT_ENCODING, config.getCharset());
-
             HttpResponse response = httpClient.execute(httpGet);
             return getResponseStr(response, config);
         } catch (Exception e) {
@@ -124,9 +120,6 @@ public class HttpClientUtil {
             for (String key : header.keySet()) {
                 httpPost.addHeader(key, header.get(key));
             }
-            httpPost.addHeader(HTTP.CONTENT_TYPE, "application/json");
-            httpPost.addHeader(HTTP.CONTENT_ENCODING, config.getCharset());
-
             EntityBuilder entityBuilder = EntityBuilder.create();
             entityBuilder.setText(json);
             entityBuilder.setContentType(ContentType.APPLICATION_JSON);
@@ -180,8 +173,6 @@ public class HttpClientUtil {
             for (String key : header.keySet()) {
                 httpPost.addHeader(key, header.get(key));
             }
-            httpPost.addHeader(HTTP.CONTENT_ENCODING, config.getCharset());
-
             if (body != null && body.size() > 0) {
                 List<NameValuePair> nvps = new ArrayList<>();
                 for (String key : body.keySet()) {

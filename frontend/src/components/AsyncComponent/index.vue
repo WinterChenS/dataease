@@ -11,7 +11,6 @@
 <script>
 import { uuid } from 'vue-uuid'
 import { get } from '@/api/system/dynamic'
-
 export default {
   name: 'AsyncComponent',
   inheritAttrs: true,
@@ -45,13 +44,11 @@ export default {
         let res
         if (!window.SyncComponentCache[this.url]) {
           window.SyncComponentCache[this.url] = get(this.url)
-
           // window.SyncComponentCache[this.url] = Axios.get(this.url)
           res = await window.SyncComponentCache[this.url]
         } else {
           res = await window.SyncComponentCache[this.url]
         }
-
         const Fn = Function
         this.mode = new Fn(`return ${res.data || res}`)()
         /* if (res && res.data) {
@@ -70,7 +67,7 @@ export default {
     }, */
     callPluginInner(param) {
       const { methodName, methodParam } = param
-      this.$refs[this.refId] && this.$refs[this.refId][methodName] && this.$refs[this.refId][methodName](methodParam)
+      return this.$refs[this.refId] && this.$refs[this.refId][methodName] && this.$refs[this.refId][methodName](methodParam)
     }
   }
 }

@@ -1,7 +1,18 @@
 <template>
   <div class="bg" :style="customStyle" @scroll="canvasScroll">
     <div id="canvasInfoMain" ref="canvasInfoMain" :style="canvasInfoMainStyle">
+      <el-row v-if="showUnpublishedArea" class="custom-position">
+        <div style="text-align: center">
+          <svg-icon icon-class="unpublished" style="font-size: 75px" />
+          <br>
+          <span>{{ $t('panel.panel_off') }}</span>
+        </div>
+      </el-row>
+      <el-row v-else-if="componentDataShow.length===0" class="custom-position">
+        {{ $t('panel.panelNull') }}
+      </el-row>
       <div
+        v-else
         id="canvasInfoTemp"
         ref="canvasInfoTemp"
         :style="[canvasInfoTempStyle,screenShotStyle]"
@@ -9,34 +20,39 @@
         @mouseup="deselectCurComponent"
         @mousedown="handleMouseDown"
       >
-        <el-row v-if="componentDataShow.length===0" class="custom-position">
-          {{ $t('panel.panelNull') }}
-        </el-row>
         <canvas-opt-bar />
         <ComponentWrapper
           v-for="(item, index) in componentDataInfo"
           :key="index"
+          ref="viewWrapperChild"
           :config="item"
+          :source-config="componentData[index]"
           :search-count="searchCount"
           :in-screen="inScreen"
           :terminal="terminal"
+          :is-relation="relationFilterIds.includes(item.id)"
           :filters="filterMap[item.propValue && item.propValue.viewId]"
+          :screen-shot="screenShot"
+          :canvas-style-data="canvasStyleData"
+          :show-position="showPosition"
         />
         <!--视图详情-->
         <el-dialog
-          :title="'['+showChartInfo.name+']'+$t('chart.chart_details')"
           :visible.sync="chartDetailsVisible"
-          width="70%"
+          width="80%"
           class="dialog-css"
           :destroy-on-close="true"
+          top="5vh"
         >
-          <span style="position: absolute;right: 70px;top:15px">
-            <el-button size="mini" @click="exportExcel">
-              <svg-icon icon-class="ds-excel" class="ds-icon-excel" />
-              {{ $t('chart.export_details') }}
+          <span v-if="chartDetailsVisible" style="position: absolute;right: 70px;top:15px">
+            <el-button v-if="showChartInfoType==='enlarge' && showChartInfo && showChartInfo.type !== 'symbol-map'" class="el-icon-picture-outline" size="mini" @click="exportViewImg">
+              {{ $t('chart.export_img') }}
+            </el-button>
+            <el-button v-if="showChartInfoType==='details'" size="mini" @click="exportExcel">
+              <svg-icon icon-class="ds-excel" class="ds-icon-excel" />{{ $t('chart.export') }}Excel
             </el-button>
           </span>
-          <UserViewDialog ref="userViewDialog" :chart="showChartInfo" :chart-table="showChartTableInfo" />
+          <UserViewDialog v-if="chartDetailsVisible" ref="userViewDialog" :open-type="showChartInfoType" :chart="showChartInfo" :chart-table="showChartTableInfo" />
         </el-dialog>
 
         <!--手机视图详情-->
@@ -66,7 +82,10 @@ import UserViewDialog from '@/components/canvas/custom-component/UserViewDialog'
 import CanvasOptBar from '@/components/canvas/components/Editor/CanvasOptBar'
 import UserViewMobileDialog from '@/components/canvas/custom-component/UserViewMobileDialog'
 import bus from '@/utils/bus'
-import { buildFilterMap } from '@/utils/conditionUtil'
+import { buildFilterMap, buildViewKeyMap, formatCondition, valueValid, viewIdMatch } from '@/utils/conditionUtil'
+import { hasDataPermission } from '@/utils/permission'
+const erd = elementResizeDetectorMaker()
+
 export default {
   components: { UserViewMobileDialog, ComponentWrapper, UserViewDialog, CanvasOptBar },
   model: {
@@ -96,6 +115,34 @@ export default {
       type: Boolean,
       required: false,
       default: true
+    },
+    activeTab: {
+      type: String,
+      required: false,
+      default: 'none'
+    },
+    componentData: {
+      type: Array,
+      required: false,
+      default: function() {
+        return []
+      }
+    },
+    canvasStyleData: {
+      type: Object,
+      required: false,
+      default: function() {
+        return {}
+      }
+    },
+    showPosition: {
+      type: String,
+      required: false,
+      default: 'NotProvided'
+    },
+    panelInfo: {
+      type: Object,
+      required: true
     }
   },
   data() {
@@ -124,13 +171,33 @@ export default {
       mobileChartDetailsVisible: false,
       showChartInfo: {},
       showChartTableInfo: {},
+      showChartInfoType: 'details',
       // 布局展示 1.pc pc端布局 2.mobile 移动端布局
-      terminal: 'pc'
+      terminal: 'pc',
+      buttonFilterMap: null
     }
   },
   created() {
+    // 取消视图请求
+    this.$cancelRequest('/chart/view/getData/**')
+    this.$cancelRequest('/api/link/viewDetail/**')
+    this.$cancelRequest('/static-resource/**')
   },
   computed: {
+    mainActiveName() {
+      return this.$store.state.panel.mainActiveName
+    },
+    showUnpublishedArea() {
+      if (this.showPosition === 'edit') {
+        return false
+      } else if (this.panelInfo && this.panelInfo.showType === 'view') {
+        return false
+      } else if ((this.mainActiveName === 'PanelMain' && this.activeTab === 'PanelList') || this.showPosition.includes('multiplexing')) {
+        return this.panelInfo.status === 'unpublished' && !hasDataPermission('manage', this.panelInfo.privileges)
+      } else {
+        return this.panelInfo.status === 'unpublished'
+      }
+    },
     canvasInfoMainStyle() {
       if (this.backScreenShot) {
         return {
@@ -189,15 +256,31 @@ export default {
       return this.componentDataShow
     },
     ...mapState([
-      'isClickComponent',
-      'curComponent',
-      'componentData',
-      'canvasStyleData',
-      'componentGap'
+      'isClickComponent'
     ]),
+
+    searchButtonInfo() {
+      const result = this.buildButtonFilterMap(this.componentData)
+      return result
+    },
     filterMap() {
-      const map = buildFilterMap(this.componentData)
-      return map
+      const result = buildFilterMap(this.componentData)
+      if (this.searchButtonInfo && this.searchButtonInfo.buttonExist && !this.searchButtonInfo.autoTrigger && this.searchButtonInfo.relationFilterIds) {
+        for (const key in result) {
+          if (Object.hasOwnProperty.call(result, key)) {
+            let filters = result[key]
+            filters = filters.filter(item => !this.searchButtonInfo.relationFilterIds.includes(item.componentId))
+            result[key] = filters
+          }
+        }
+      }
+      return result
+    },
+    buttonExist() {
+      return this.searchButtonInfo && this.searchButtonInfo.buttonExist
+    },
+    relationFilterIds() {
+      return this.buttonExist && this.searchButtonInfo.relationFilterIds || []
     }
   },
   watch: {
@@ -216,35 +299,108 @@ export default {
   },
   mounted() {
     this._isMobile()
-    const _this = this
-    const erd = elementResizeDetectorMaker()
-    // 监听主div变动事件
-    erd.listenTo(document.getElementById('canvasInfoMain'), element => {
-      _this.$nextTick(() => {
-        _this.restore()
-      })
-    })
-    // 监听画布div变动事件
-    const tempCanvas = document.getElementById('canvasInfoTemp')
-    erd.listenTo(document.getElementById('canvasInfoTemp'), element => {
-      _this.$nextTick(() => {
-        // 将mainHeight 修改为px 临时解决html2canvas 截图不全的问题
-        _this.mainHeight = tempCanvas.scrollHeight + 'px!important'
-        this.$emit('mainHeightChange', _this.mainHeight)
-      })
-    })
-    eventBus.$on('openChartDetailsDialog', this.openChartDetailsDialog)
-    _this.$store.commit('clearLinkageSettingInfo', false)
-    _this.canvasStyleDataInit()
+    this.initListen()
+    this.$store.commit('clearLinkageSettingInfo', false)
+    this.canvasStyleDataInit()
     // 如果当前终端设备是移动端，则进行移动端的布局设计
-    if (_this.terminal === 'mobile') {
-      _this.initMobileCanvas()
+    if (this.terminal === 'mobile') {
+      this.initMobileCanvas()
     }
+    bus.$on('trigger-search-button', this.triggerSearchButton)
   },
   beforeDestroy() {
+    erd.uninstall(this.$refs.canvasInfoTemp)
+    erd.uninstall(this.$refs.canvasInfoMain)
     clearInterval(this.timer)
+    eventBus.$off('openChartDetailsDialog', this.openChartDetailsDialog)
+    bus.$on('trigger-search-button', this.triggerSearchButton)
   },
   methods: {
+    triggerSearchButton() {
+      const result = this.buildButtonFilterMap(this.componentData)
+      this.searchButtonInfo.autoTrigger = result.autoTrigger
+      this.searchButtonInfo.filterMap = result.filterMap
+      this.buttonFilterMap = this.searchButtonInfo.filterMap
+
+      this.componentData.forEach(component => {
+        if (component.type === 'view' && this.buttonFilterMap[component.propValue.viewId]) {
+          component.filters = this.buttonFilterMap[component.propValue.viewId]
+        }
+      })
+    },
+    buildButtonFilterMap(panelItems) {
+      const result = {
+        buttonExist: false,
+        relationFilterIds: [],
+        autoTrigger: true,
+        filterMap: {
+
+        }
+      }
+      if (!panelItems || !panelItems.length) return result
+      let sureButtonItem = null
+      result.buttonExist = panelItems.some(item => {
+        if (item.type === 'custom-button' && item.serviceName === 'buttonSureWidget') {
+          sureButtonItem = item
+          return true
+        }
+      })
+
+      if (!result.buttonExist) return result
+
+      const customRange = sureButtonItem.options.attrs.customRange
+      result.autoTrigger = sureButtonItem.options.attrs.autoTrigger
+      const allFilters = panelItems.filter(item => item.type === 'custom')
+
+      const matchFilters = customRange && allFilters.filter(item => sureButtonItem.options.attrs.filterIds.includes(item.id)) || allFilters
+
+      result.relationFilterIds = matchFilters.map(item => item.id)
+
+      let viewKeyMap = buildViewKeyMap(panelItems)
+      viewKeyMap = this.buildViewKeyFilters(matchFilters, viewKeyMap)
+      result.filterMap = viewKeyMap
+      return result
+    },
+    buildViewKeyFilters(panelItems, result) {
+      const refs = this.$refs
+      if (!this.$refs['viewWrapperChild'] || !this.$refs['viewWrapperChild'].length) return result
+      panelItems.forEach((element) => {
+        if (element.type !== 'custom') {
+          return true
+        }
+
+        const index = this.getComponentIndex(element.id)
+        if (index < 0) {
+          return true
+        }
+        let param = null
+        const wrapperChild = refs['viewWrapperChild'][index]
+        param = wrapperChild.getCondition && wrapperChild.getCondition()
+        const condition = formatCondition(param)
+        const vValid = valueValid(condition)
+        const filterComponentId = condition.componentId
+        Object.keys(result).forEach(viewId => {
+          const vidMatch = viewIdMatch(condition.viewIds, viewId)
+          const viewFilters = result[viewId]
+          let j = viewFilters.length
+          while (j--) {
+            const filter = viewFilters[j]
+            if (filter.componentId === filterComponentId) {
+              viewFilters.splice(j, 1)
+            }
+          }
+          vidMatch && vValid && viewFilters.push(condition)
+        })
+      })
+      return result
+    },
+    getComponentIndex(id) {
+      for (let index = 0; index < this.componentData.length; index++) {
+        const item = this.componentData[index]
+        if (item.id === id) return index
+      }
+      return -1
+    },
     _isMobile() {
       const flag = navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)
       this.terminal = flag ? 'mobile' : 'pc'
@@ -316,6 +472,7 @@ export default {
     openChartDetailsDialog(chartInfo) {
       this.showChartInfo = chartInfo.chart
       this.showChartTableInfo = chartInfo.tableChart
+      this.showChartInfoType = chartInfo.openType
       if (this.terminal === 'pc') {
         this.chartDetailsVisible = true
       } else {
@@ -324,6 +481,9 @@ export default {
     },
     exportExcel() {
       this.$refs['userViewDialog'].exportExcel()
+    },
+    exportViewImg() {
+      this.$refs['userViewDialog'].exportViewImg()
     },
     deselectCurComponent(e) {
       if (!this.isClickComponent) {
@@ -338,6 +498,32 @@ export default {
     },
     canvasScroll() {
       bus.$emit('onScroll')
+    },
+    initListen() {
+      const _this = this
+      const canvasMain = document.getElementById('canvasInfoMain')
+      // 监听主div变动事件
+      if (canvasMain) {
+        erd.listenTo(canvasMain, element => {
+          _this.$nextTick(() => {
+            _this.restore()
+          })
+        })
+      }
+      setTimeout(() => {
+        // 监听画布div变动事件
+        const tempCanvas = document.getElementById('canvasInfoTemp')
+        if (tempCanvas) {
+          erd.listenTo(document.getElementById('canvasInfoTemp'), element => {
+            _this.$nextTick(() => {
+              // 将mainHeight 修改为px 临时解决html2canvas 截图不全的问题
+              _this.mainHeight = tempCanvas.scrollHeight + 'px!important'
+              this.$emit('mainHeightChange', _this.mainHeight)
+            })
+          })
+        }
+      }, 1500)
+      eventBus.$on('openChartDetailsDialog', this.openChartDetailsDialog)
     }
   }
 }
@@ -360,7 +546,12 @@ export default {
   }
 
   .custom-position {
+    line-height: 30px;
+    width: 100%;
+    z-index: 100;
     height: 100%;
+    text-align: center;
+    cursor:not-allowed;
     flex: 1;
     display: flex;
     align-items: center;
@@ -370,23 +561,23 @@ export default {
     color: #9ea6b2;
   }
 
-  .dialog-css > > > .el-dialog__title {
+  .dialog-css ::v-deep .el-dialog__title {
     font-size: 14px;
   }
 
-  .dialog-css > > > .el-dialog__header {
-    padding: 20px 20px 0;
+  .dialog-css ::v-deep .el-dialog__header {
+    padding: 40px 20px 0;
   }
 
-  .dialog-css > > > .el-dialog__body {
+  .dialog-css ::v-deep  .el-dialog__body {
     padding: 10px 20px 20px;
   }
 
-  .mobile-dialog-css > > > .el-dialog__headerbtn {
+  .mobile-dialog-css ::v-deep .el-dialog__headerbtn {
     top: 7px
   }
 
-  .mobile-dialog-css > > > .el-dialog__body {
+  .mobile-dialog-css ::v-deep .el-dialog__body {
     padding: 0px;
   }
   ::-webkit-scrollbar {

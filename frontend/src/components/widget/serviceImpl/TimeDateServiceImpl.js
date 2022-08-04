@@ -40,7 +40,10 @@ const dialogPanel = {
           ],
           limits: [1, 12]
         }
-      }
+      },
+      showTime: false,
+      accuracy: 'HH:mm'
+
     },
     value: '',
     manualModify: false
@@ -79,7 +82,6 @@ class TimeDateServiceImpl extends WidgetService {
   initLeftPanel() {
     const value = JSON.parse(JSON.stringify(leftPanel))
     return value
-    // console.log('this is first initWidget')
   }
 
   initFilterDialog() {
@@ -210,8 +212,17 @@ class TimeDateServiceImpl extends WidgetService {
       return results
     } else {
       const value = values[0]
-      return timeSection(parseFloat(value), element.options.attrs.type)
+      const componentType = element.options.attrs.showTime ? 'datetime' : 'date'
+      let labelFormat = 'yyyy-MM-dd'
+      if (element.options.attrs.showTime && element.options.attrs.accuracy) {
+        labelFormat = labelFormat + ' ' + element.options.attrs.accuracy
+      }
+
+      return timeSection(parseFloat(value), componentType || element.options.attrs.type, labelFormat)
     }
+  }
+  isTimeWidget() {
+    return true
   }
 }
 const timeDateServiceImpl = new TimeDateServiceImpl({

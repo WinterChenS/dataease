@@ -334,7 +334,6 @@ export default {
       })
     },
     saveEdit(item) {
-      // console.log(this.tableFields)
       // const list = this.tableFields.dimensionListData.concat(this.tableFields.quotaListData)
       // batchEdit(list).then(response => {
       //   // this.closeEdit()
@@ -347,8 +346,10 @@ export default {
 
       post('/dataset/field/save', item).then(response => {
         this.initField()
+        localStorage.setItem('reloadDsData', 'true')
       }).catch(res => {
         this.initField()
+        localStorage.setItem('reloadDsData', 'true')
       })
     },
 
@@ -399,6 +400,7 @@ export default {
             showClose: true
           })
           this.initField()
+          localStorage.setItem('reloadDsData', 'true')
         })
       }).catch(() => {
       })
@@ -412,6 +414,7 @@ export default {
       }).then(() => {
         this.isSyncField = true
         post('/dataset/table/syncField/' + this.param.id, null).then(response => {
+          localStorage.setItem('reloadDsData', 'true')
           setTimeout(() => {
             this.isSyncField = false
             this.initField()

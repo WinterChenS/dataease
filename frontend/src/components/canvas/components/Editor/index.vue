@@ -9,12 +9,12 @@
         ['parent_transform']:!dialogVisible
       }
     ]"
+    :style="editStyle"
     @mousedown="handleMouseDown"
     @scroll="canvasScroll"
   >
     <!-- 网格线 -->
-    <Grid v-if="psDebug&&canvasStyleData.auxiliaryMatrix&&!linkageSettingStatus" :matrix-style="matrixStyle" />
-    <!--    positionBox:{{positionBoxInfo}}-->
+    <Grid v-if="showGrid" :matrix-style="matrixStyle" />
     <PGrid v-if="psDebug" :position-box="positionBoxInfoArray" :matrix-style="matrixStyle" />
 
     <!-- 仪表板联动清除按钮-->
@@ -40,11 +40,12 @@
       :snap="true"
       :snap-tolerance="2"
       :change-style="customStyle"
-      :draggable="!linkageSettingStatus"
-      :resizable="!linkageSettingStatus"
-      :linkage-active="linkageSettingStatus&&item===curLinkageView"
+      :draggable="deDraggable"
+      :resizable="deResizable"
+      :linkage-active="linkageActiveCheck(item)"
+      :batch-opt-active="batchOptActiveCheck(item)"
       @refLineParams="getRefLineParams"
-      @showViewDetails="showViewDetails(index)"
+      @showViewDetails="showViewDetails($event,index)"
       @resizeView="resizeView(index,item)"
       @onResizeStart="startResize"
       @onDragStart="onStartMove"
@@ -57,36 +58,24 @@
       @linkJumpSet="linkJumpSet(item)"
       @boardSet="boardSet(item)"
       @canvasDragging="canvasDragging"
+      @editComponent="editComponent(index,item)"
     >
-      <component
-        :is="item.component"
-        v-if="renderOk&&item.type==='v-text'"
-        :id="'component' + item.id"
-        ref="wrapperChild"
-        class="component"
-        :style="getComponentStyleDefault(item.style)"
-        :prop-value="item.propValue"
-        :element="item"
-        :out-style="getShapeStyleInt(item.style)"
-        :edit-mode="'edit'"
-        :active="item === curComponent"
-        @input="handleInput"
-      />
       <de-out-widget
-        v-else-if="renderOk&&item.type==='custom'"
+        v-if="renderOk && item.type==='custom'"
         :id="'component' + item.id"
         ref="wrapperChild"
         class="component"
         :style="getComponentStyleDefault(item.style)"
         :prop-value="item.propValue"
         :element="item"
+        :is-relation="searchButtonInfo && searchButtonInfo.buttonExist && searchButtonInfo.relationFilterIds.includes(item.id)"
         :out-style="getShapeStyleInt(item.style)"
         :active="item === curComponent"
         :h="getShapeStyleIntDeDrag(item.style,'height')"
       />
       <component
         :is="item.component"
-        v-else-if="renderOk&&item.type==='other'"
+        v-else-if="renderOk && item.type==='other'"
         :id="'component' + item.id"
         ref="wrapperChild"
         class="component"
@@ -110,11 +99,16 @@
         :active="item === curComponent"
         :edit-mode="'edit'"
         :h="getShapeStyleIntDeDrag(item.style,'height')"
+        :canvas-style-data="canvasStyleData"
+        @input="handleInput"
+        @trigger-plugin-edit="pluginEditHandler"
       />
     </de-drag>
     <!--拖拽阴影部分-->
     <!--    <drag-shadow v-if="(curComponent&&this.curComponent.optStatus.dragging)||dragComponentInfo" />-->
-    <drag-shadow v-if="(curComponent&&curComponent.auxiliaryMatrix&&(curComponent.optStatus.dragging||curComponent.optStatus.resizing))||(dragComponentInfo)" />
+    <drag-shadow
+      v-if="(curComponent&&curComponent.auxiliaryMatrix&&(curComponent.optStatus.dragging||curComponent.optStatus.resizing))||(dragComponentInfo)"
+    />
     <!-- 右击菜单 -->
     <ContextMenu />
     <!-- 标线 (临时去掉标线 吸附等功能)-->
@@ -142,20 +136,28 @@
 
     <!--视图详情-->
     <el-dialog
-      :title="'['+showChartInfo.name+']'+$t('chart.chart_details')"
       :visible.sync="chartDetailsVisible"
-      width="70%"
+      width="80%"
       class="dialog-css"
       :destroy-on-close="true"
       :show-close="true"
+      top="5vh"
     >
-      <span style="position: absolute;right: 70px;top:15px">
-        <el-button size="mini" @click="exportExcel">
-          <svg-icon icon-class="ds-excel" class="ds-icon-excel" />
-          {{ $t('chart.export_details') }}
+      <span v-if="chartDetailsVisible" style="position: absolute;right: 70px;top:15px">
+        <el-button v-if="showChartInfoType==='enlarge' && showChartInfo && showChartInfo.type !== 'symbol-map'" class="el-icon-picture-outline" size="mini" @click="exportViewImg">
+          {{ $t('chart.export_img') }}
+        </el-button>
+        <el-button v-if="showChartInfoType==='details'" size="mini" @click="exportExcel">
+          <svg-icon icon-class="ds-excel" class="ds-icon-excel" />{{ $t('chart.export') }}Excel
         </el-button>
       </span>
-      <UserViewDialog ref="userViewDialog" :chart="showChartInfo" :chart-table="showChartTableInfo" />
+      <UserViewDialog
+        v-if="chartDetailsVisible"
+        ref="userViewDialog"
+        :chart="showChartInfo"
+        :chart-table="showChartTableInfo"
+        :open-type="showChartInfoType"
+      />
     </el-dialog>
 
     <el-dialog
@@ -178,7 +180,7 @@
       :destroy-on-close="true"
       :append-to-body="true"
     >
-      <background />
+      <background v-if="boardSetVisible" @backgroundSetClose="backgroundSetClose" />
     </el-dialog>
   </div>
 </template>
@@ -205,7 +207,7 @@ import CanvasOptBar from '@/components/canvas/components/Editor/CanvasOptBar'
 import DragShadow from '@/components/DeDrag/shadow'
 import bus from '@/utils/bus'
 import LinkJumpSet from '@/views/panel/LinkJumpSet'
-import { buildFilterMap } from '@/utils/conditionUtil'
+import { buildFilterMap, buildViewKeyMap, formatCondition, valueValid, viewIdMatch } from '@/utils/conditionUtil'
 // 挤占式画布
 import _ from 'lodash'
 import $ from 'jquery'
@@ -243,20 +245,18 @@ function debounce(func, time) {
 
 function scrollScreen(e) {
   if (e.clientY + 50 >= window.innerHeight) {
-    // console.log('scrollScreen+')
     const body = $(document.body)
     body.scrollTop(body.scrollTop() + 20)
   } else if (e.clientY <= 150) {
-    // console.log('scrollScreen-')
     const body = $(document.body)
     body.scrollTop(body.scrollTop() - 20)
   }
 }
 
 /**
- * 重置位置盒子
- *
- */
+   * 重置位置盒子
+   *
+   */
 function resetPositionBox() {
   // 根据当前容器的宽度来决定多少列
   itemMaxX = this.maxCell
@@ -273,20 +273,24 @@ function resetPositionBox() {
 }
 
 /**
- * 填充位置盒子
- *
- * @param {any} item
- */
+   * 填充位置盒子
+   *
+   * @param {any} item
+   */
 function addItemToPositionBox(item) {
-  const pb = positionBox
-  if (item.x <= 0 || item.y <= 0) return
+  try {
+    const pb = positionBox
+    if (item.x <= 0 || item.y <= 0) return
 
-  for (let i = item.x - 1; i < item.x - 1 + item.sizex; i++) {
-    for (let j = item.y - 1; j < item.y - 1 + item.sizey; j++) {
-      if (pb[j][i]) {
-        pb[j][i].el = item
+    for (let i = item.x - 1; i < item.x - 1 + item.sizex; i++) {
+      for (let j = item.y - 1; j < item.y - 1 + item.sizey; j++) {
+        if (pb[j][i]) {
+          pb[j][i].el = item
+        }
       }
     }
+  } catch (e) {
+    // igonre
   }
 }
 
@@ -320,9 +324,9 @@ function removeItemFromPositionBox(item) {
 }
 
 /**
- * 重新计算宽度，使最小单元格能占满整个容器
- *
- */
+   * 重新计算宽度，使最小单元格能占满整个容器
+   *
+   */
 function recalcCellWidth() {
   this.maxCell = this.matrixCount.x
 }
@@ -399,11 +403,11 @@ function resizePlayer(item, newSize) {
 }
 
 /**
- * 检查移动的位置，如果不合法，会自动修改
- *
- * @param {any} item
- * @param {any} position
- */
+   * 检查移动的位置，如果不合法，会自动修改
+   *
+   * @param {any} item
+   * @param {any} position
+   */
 function checkItemPosition(item, position) {
   position = position || {}
   position.x = position.x || item.x
@@ -444,11 +448,11 @@ function checkItemPosition(item, position) {
 }
 
 /**
- * 移动正在拖动的元素
- *
- * @param {any} item
- * @param {any} position
- */
+   * 移动正在拖动的元素
+   *
+   * @param {any} item
+   * @param {any} position
+   */
 function movePlayer(item, position) {
   const vm = this
   removeItemFromPositionBox(item)
@@ -474,19 +478,21 @@ function movePlayer(item, position) {
 }
 
 function removeItem(index) {
-  const vm = this
-  const item = this.yourList[index]
-  removeItemFromPositionBox(item)
+  try {
+    const vm = this
+    const item = this.yourList[index]
+    removeItemFromPositionBox(item)
 
-  const belowItems = findBelowItems.call(this, item)
-  _.forEach(belowItems, function(upItem) {
-    const canGoUpRows = canItemGoUp(upItem)
-    if (canGoUpRows > 0) {
-      moveItemUp.call(vm, upItem, canGoUpRows)
-    }
-  })
-
-  this.yourList.splice(index, 1, {})
+    const belowItems = findBelowItems.call(this, item)
+    _.forEach(belowItems, function(upItem) {
+      const canGoUpRows = canItemGoUp(upItem)
+      if (canGoUpRows > 0) {
+        moveItemUp.call(vm, upItem, canGoUpRows)
+      }
+    })
+    this.yourList.splice(index, 1, {})
+  } catch (e) {
+  }
 }
 
 // 矩阵设计初始化的时候 预占位，防止编辑仪表板页面，初始化和视图编辑返回时出现组件位置变化问题
@@ -498,7 +504,6 @@ function initPosition(_this) {
 }
 
 function addItem(item, index) {
-  // console.log('addItem')
   if (index < 0) {
     index = this.yourList.length
   }
@@ -531,10 +536,10 @@ function changeToCoord(left, top, width, height) {
 }
 
 /**
- * 检测有无碰撞，并作出处理
- *
- * @param {any} tCoord 比对对象的坐标
- */
+   * 检测有无碰撞，并作出处理
+   *
+   * @param {any} tCoord 比对对象的坐标
+   */
 // eslint-disable-next-line no-unused-vars
 function findClosetCoords(item, tCoord) {
   if (isOverlay) return
@@ -575,10 +580,10 @@ function findClosetCoords(item, tCoord) {
 }
 
 /**
- * 生成坐标点
- *
- * @param {any} item
- */
+   * 生成坐标点
+   *
+   * @param {any} item
+   */
 // eslint-disable-next-line no-unused-vars
 function makeCoordinate(item) {
   const width = this.cellWidth * (item.sizex) - this.baseMarginLeft
@@ -624,10 +629,10 @@ function changeItemCoord(item) {
 }
 
 /**
- * 清空目标位置的元素
- *
- * @param {any} item
- */
+   * 清空目标位置的元素
+   *
+   * @param {any} item
+   */
 function emptyTargetCell(item) {
   const vm = this
   const belowItems = findBelowItems(item)
@@ -642,11 +647,11 @@ function emptyTargetCell(item) {
 }
 
 /**
- * 当前位置的item能否上浮
- *
- * @param {any} item
- * @returns
- */
+   * 当前位置的item能否上浮
+   *
+   * @param {any} item
+   * @returns
+   */
 function canItemGoUp(item) {
   let upperRows = 0
   for (let row = item.y - 2; row >= 0; row--) {
@@ -662,11 +667,11 @@ function canItemGoUp(item) {
 }
 
 /**
- * 在移动之前，找到当前下移的元素的下面的元素（递归）
- *
- * @param {any} items
- * @param {any} size
- */
+   * 在移动之前，找到当前下移的元素的下面的元素（递归）
+   *
+   * @param {any} items
+   * @param {any} size
+   */
 function moveItemDown(item, size) {
   const vm = this
   removeItemFromPositionBox(item)
@@ -704,12 +709,12 @@ function setPlayerPosition(item, position) {
 }
 
 /**
- * 寻找子元素到父元素的最大距离
- *
- * @param {any} parent
- * @param {any} son
- * @param {any} size
- */
+   * 寻找子元素到父元素的最大距离
+   *
+   * @param {any} parent
+   * @param {any} son
+   * @param {any} size
+   */
 function calcDiff(parent, son, size) {
   const diffs = []
 
@@ -763,20 +768,35 @@ function findBelowItems(item) {
           break
         }
       } catch (e) {
-        console.log('positionBox igonre')
+        console.error('positionBox igonre', e)
       }
     }
   }
 
   return _.sortBy(_.values(belowItems), 'y')
 }
+
 // eslint-disable-next-line no-unused-vars
 function getoPsitionBox() {
   return positionBox
 }
 
 export default {
-  components: { Background, Shape, ContextMenu, MarkLine, Area, Grid, PGrid, DeDrag, UserViewDialog, DeOutWidget, CanvasOptBar, DragShadow, LinkJumpSet },
+  components: {
+    Background,
+    Shape,
+    ContextMenu,
+    MarkLine,
+    Area,
+    Grid,
+    PGrid,
+    DeDrag,
+    UserViewDialog,
+    DeOutWidget,
+    CanvasOptBar,
+    DragShadow,
+    LinkJumpSet
+  },
   props: {
     isEdit: {
       type: Boolean,
@@ -792,17 +812,20 @@ export default {
     dragStart: {
       required: false,
       type: Function,
-      default: function() {}
+      default: function() {
+      }
     },
     dragging: {
       required: false,
       type: Function,
-      default: function() {}
+      default: function() {
+      }
     },
     dragEnd: {
       required: false,
       type: Function,
-      default: function() {}
+      default: function() {
+      }
     },
     resizable: {
       required: false,
@@ -812,27 +835,24 @@ export default {
     resizeStart: {
       required: false,
       type: Function,
-      default: function() {}
+      default: function() {
+      }
     },
     resizing: {
       required: false,
       type: Function,
-      default: function() {}
+      default: function() {
+      }
     },
     resizeEnd: {
       required: false,
       type: Function,
-      default: function() {}
+      default: function() {
+      }
     },
     matrixCount: {
-      required: false,
-      type: Object,
-      default: () => {
-        return {
-          x: 36,
-          y: 18
-        }
-      }
+      required: true,
+      type: Object
     },
     scrollTop: {
       type: Number,
@@ -891,6 +911,7 @@ export default {
       chartDetailsVisible: false,
       showChartInfo: {},
       showChartTableInfo: {},
+      showChartInfoType: 'details',
       // 挤占式画布设计
       baseWidth: 100,
       baseHeight: 100,
@@ -908,10 +929,34 @@ export default {
       yourList: [],
       linkJumpSetVisible: false,
       linkJumpSetViewId: null,
-      editShow: false
+      editShow: false,
+      buttonFilterMap: null,
+      autoTrigger: true
     }
   },
   computed: {
+    deDraggable() {
+      return !this.linkageSettingStatus && !this.batchOptStatus
+    },
+    deResizable() {
+      return !this.linkageSettingStatus && !this.batchOptStatus
+    },
+    showExportImgButton() {
+      // if the chart type belong to table,'export image' button should be hidden
+      return this.showChartInfo.type && !this.showChartInfo.type.includes('table')
+    },
+    showGrid() {
+      if (this.canvasStyleData && this.canvasStyleData.aidedDesign) {
+        return this.canvasStyleData.aidedDesign.showGrid
+      } else {
+        return false
+      }
+    },
+    editStyle() {
+      return {
+        height: this.outStyle.height + this.scrollTop + 'px !important'
+      }
+    },
     dialogVisible() {
       return this.chartDetailsVisible || this.linkJumpSetVisible
     },
@@ -957,11 +1002,28 @@ export default {
       'doSnapshotIndex',
       'componentGap',
       'mobileLayoutStatus',
-      'curCanvasScale'
+      'curCanvasScale',
+      'batchOptStatus'
     ]),
+
+    searchButtonInfo() {
+      const result = this.buildButtonFilterMap(this.componentData)
+      return result
+    },
     filterMap() {
-      return buildFilterMap(this.componentData)
+      const result = buildFilterMap(this.componentData)
+      if (this.searchButtonInfo && this.searchButtonInfo.buttonExist && !this.searchButtonInfo.autoTrigger && this.searchButtonInfo.relationFilterIds) {
+        for (const key in result) {
+          if (Object.hasOwnProperty.call(result, key)) {
+            let filters = result[key]
+            filters = filters.filter(item => !this.searchButtonInfo.relationFilterIds.includes(item.componentId))
+            result[key] = filters
+          }
+        }
+      }
+      return result
     }
+
   },
   watch: {
     customStyle: {
@@ -984,7 +1046,6 @@ export default {
         if (newVal.length !== this.lastComponentDataLength) {
           this.lastComponentDataLength = newVal.length
           this.initMatrix()
-          // console.log('componentData-initMatrix')
         }
       },
       deep: true
@@ -1000,23 +1061,43 @@ export default {
         this.initMatrix()
       },
       deep: true
+    },
+    autoTrigger: {
+      handler(val, old) {
+        if (val === old) return
+        const result = buildFilterMap(this.componentData)
+        for (const key in result) {
+          if (Object.hasOwnProperty.call(result, key)) {
+            let filters = result[key]
+            if (this.searchButtonInfo && this.searchButtonInfo.buttonExist && !this.searchButtonInfo.autoTrigger && this.searchButtonInfo.relationFilterIds) {
+              filters = filters.filter(item => !this.searchButtonInfo.relationFilterIds.includes(item.componentId))
+            }
+
+            this.filterMap[key] = filters
+
+            this.componentData.forEach(item => {
+              if (item.type === 'view' && item.propValue.viewId === key) {
+                item.filters = filters
+              }
+            })
+          }
+        }
+      },
+      deep: true
     }
   },
 
   mounted() {
-    setTimeout(() => {
-      this.changeScale()
-      this.editShow = true
-    }, 500)
+    this.canvasInit()
     // 获取编辑器元素
     this.$store.commit('getEditor')
     const _this = this
-    eventBus.$on('hideArea', () => {
-      this.hideArea()
-    })
+    eventBus.$on('hideArea', this.hideArea)
     eventBus.$on('startMoveIn', this.startMoveIn)
     eventBus.$on('openChartDetailsDialog', this.openChartDetailsDialog)
     bus.$on('onRemoveLastItem', this.removeLastItem)
+    bus.$on('trigger-search-button', this.triggerSearchButton)
+    bus.$on('refresh-button-info', this.refreshButtonInfo)
 
     // 矩阵定位调试模式
     if (this.psDebug) {
@@ -1024,14 +1105,146 @@ export default {
         _this.positionBoxInfoArray = positionBox
       }, 500)
     }
-    eventBus.$on('backgroundSetClose', () => {
-      this.boardSetVisible = false
-    })
+  },
+  beforeDestroy() {
+    eventBus.$off('hideArea', this.hideArea)
+    eventBus.$off('startMoveIn', this.startMoveIn)
+    eventBus.$off('openChartDetailsDialog', this.openChartDetailsDialog)
+    bus.$off('onRemoveLastItem', this.removeLastItem)
+    bus.$off('trigger-search-button', this.triggerSearchButton)
+    bus.$off('refresh-button-info', this.refreshButtonInfo)
   },
   created() {
   },
   methods: {
+    refreshButtonInfo() {
+      const result = this.buildButtonFilterMap(this.componentData)
+      this.searchButtonInfo.buttonExist = result.buttonExist
+      this.searchButtonInfo.relationFilterIds = result.relationFilterIds
+      this.searchButtonInfo.filterMap = result.filterMap
+      this.searchButtonInfo.autoTrigger = result.autoTrigger
+      this.buttonFilterMap = this.searchButtonInfo.filterMap
+    },
+    triggerSearchButton() {
+      this.refreshButtonInfo()
+      this.buttonFilterMap = this.searchButtonInfo.filterMap
+
+      this.componentData.forEach(component => {
+        if (component.type === 'view' && this.buttonFilterMap[component.propValue.viewId]) {
+          component.filters = this.buttonFilterMap[component.propValue.viewId]
+        }
+      })
+
+      // this.$store.commit('addViewFilter', param)
+    },
+    buildButtonFilterMap(panelItems) {
+      const result = {
+        buttonExist: false,
+        relationFilterIds: [],
+        autoTrigger: true,
+        filterMap: {}
+      }
+      if (!panelItems || !panelItems.length) return result
+      let sureButtonItem = null
+      result.buttonExist = panelItems.some(item => {
+        if (item.type === 'custom-button' && item.serviceName === 'buttonSureWidget') {
+          sureButtonItem = item
+          return true
+        }
+      })
+
+      if (!result.buttonExist) return result
+
+      const customRange = sureButtonItem.options.attrs.customRange
+      result.autoTrigger = sureButtonItem.options.attrs.autoTrigger
+      this.autoTrigger = result.autoTrigger
+
+      const allFilters = panelItems.filter(item => item.type === 'custom')
+
+      const matchFilters = customRange && allFilters.filter(item => sureButtonItem.options.attrs.filterIds.includes(item.id)) || allFilters
+
+      result.relationFilterIds = matchFilters.map(item => item.id)
+
+      let viewKeyMap = buildViewKeyMap(panelItems)
+      viewKeyMap = this.buildViewKeyFilters(matchFilters, viewKeyMap)
+      result.filterMap = viewKeyMap
+      return result
+    },
+    buildViewKeyFilters(panelItems, result) {
+      const refs = this.$refs
+      if (!this.$refs['wrapperChild'] || !this.$refs['wrapperChild'].length) return result
+      const len = this.$refs['wrapperChild'].length
+      panelItems.forEach((element) => {
+        if (element.type !== 'custom') {
+          return true
+        }
+
+        let param = null
+        const index = this.getComponentIndex(element.id)
+        if (index < 0 || index >= len) {
+          return true
+        }
+        const wrapperChild = refs['wrapperChild'][index]
+        if (!wrapperChild || !wrapperChild.getCondition) return true
+        param = wrapperChild.getCondition && wrapperChild.getCondition()
+        const condition = formatCondition(param)
+        const vValid = valueValid(condition)
+        const filterComponentId = condition.componentId
+        Object.keys(result).forEach(viewId => {
+          const vidMatch = viewIdMatch(condition.viewIds, viewId)
+          const viewFilters = result[viewId]
+          let j = viewFilters.length
+          while (j--) {
+            const filter = viewFilters[j]
+            if (filter.componentId === filterComponentId) {
+              viewFilters.splice(j, 1)
+            }
+          }
+          vidMatch && vValid && viewFilters.push(condition)
+        })
+      })
+      return result
+    },
+    getComponentIndex(id) {
+      for (let index = 0; index < this.componentData.length; index++) {
+        const item = this.componentData[index]
+        if (item.id === id) return index
+      }
+      return -1
+    },
+    pluginEditHandler({ e, id }) {
+      let index = -1
+      for (let i = 0; i < this.componentData.length; i++) {
+        const item = this.componentData[i]
+        const itemId = item.id
+        if (id === itemId) {
+          index = i
+          break
+        }
+      }
+      if (index >= 0) {
+        const _this = this
+        _this.$refs.deDragRef && _this.$refs.deDragRef[index] && _this.$refs.deDragRef[index].triggerPluginEdit && _this.$refs.deDragRef[index].triggerPluginEdit(e)
+      }
+    },
+    linkageActiveCheck(item) {
+      return this.linkageSettingStatus && item === this.curLinkageView
+    },
+    batchOptActiveCheck(item) {
+      return this.batchOptStatus && item.type === 'view'
+    },
+    canvasInit() {
+      this.editShow = false
+      setTimeout(() => {
+        this.changeScale()
+        this.editShow = true
+      }, 500)
+    },
+    backgroundSetClose() {
+      this.boardSetVisible = false
+    },
     boardSet(item) {
+      this.$emit('boardSet', item)
       this.boardSetVisible = true
     },
     changeStyleWithScale,
@@ -1184,10 +1397,20 @@ export default {
       // 自适应画布区域 返回原值
       return value * scale / 100
     },
-    changeScale() {
-      if (this.canvasStyleData.matrixCount) {
-        this.matrixCount = this.canvasStyleData.matrixCount
+    // 修改矩阵点
+    changeComponentSizePoint(pointScale) {
+      if (pointScale) {
+        this.componentData.forEach((item, index) => {
+          item.x = (item.x - 1) * pointScale + 1
+          item.y = (item.y - 1) * pointScale + 1
+          item.sizex = item.sizex * pointScale
+          item.sizey = item.sizey * pointScale
+        })
+        this.changeScale()
       }
+    },
+
+    changeScale() {
       // 1.3 版本重新设计仪表板定位方式，基准画布宽高为 1600*900 宽度自适应当前画布获取缩放比例scaleWidth
       // 高度缩放比例scaleHeight = scaleWidth 基础矩阵为128*72 矩阵原始宽度12.5*12.5 矩阵高度可以调整
 
@@ -1206,7 +1429,6 @@ export default {
         this.baseHeight = this.matrixStyle.height
         this.cellWidth = this.matrixStyle.width
         this.cellHeight = this.matrixStyle.height
-        // console.log('.initMatrix1')
         this.initMatrix()
 
         this.scaleWidth = this.outStyle.width * 100 / this.canvasStyleData.width
@@ -1224,7 +1446,10 @@ export default {
             matrixStyleOriginWidth: this.matrixStyle.originWidth,
             matrixStyleOriginHeight: this.matrixStyle.originHeight
           })
-        this.$store.commit('setPreviewCanvasScale', { scaleWidth: this.scalePointWidth, scaleHeight: this.scalePointHeight })
+        this.$store.commit('setPreviewCanvasScale', {
+          scaleWidth: this.scalePointWidth,
+          scaleHeight: this.scalePointHeight
+        })
       }
     },
     getShapeStyleIntDeDrag(style, prop) {
@@ -1242,7 +1467,6 @@ export default {
       }
       if (prop === 'top') {
         const top = this.format(style['top'], this.scaleHeight)
-        // console.log('top:' + top)
         return top
       }
     },
@@ -1269,21 +1493,33 @@ export default {
       this.timeMachine = null
     },
     openChartDetailsDialog(chartInfo) {
-      debugger
       this.showChartInfo = chartInfo.chart
       this.showChartTableInfo = chartInfo.tableChart
+      this.showChartInfoType = chartInfo.openType
       this.chartDetailsVisible = true
     },
     exportExcel() {
       this.$refs['userViewDialog'].exportExcel()
     },
-    showViewDetails(index) {
-      this.$refs.wrapperChild[index].openChartDetailsDialog()
+    exportViewImg() {
+      this.$refs['userViewDialog'].exportViewImg()
+    },
+    showViewDetails(params, index) {
+      this.$refs.wrapperChild[index].openChartDetailsDialog(params)
     },
 
     resizeView(index, item) {
       if (item.type === 'view' || item.type === 'de-show-date') {
-        this.$refs.wrapperChild[index].chartResize()
+        try {
+          this.$refs.wrapperChild[index].chartResize()
+        } catch (e) {
+          // ignore error
+        }
+      }
+    },
+    editComponent(index, item) {
+      if (item.type === 'view') {
+        this.$refs.wrapperChild[index].editChart()
       }
     },
     handleDragOver(e) {
@@ -1359,7 +1595,6 @@ export default {
       infoBox.oldSizeY = item.sizey
     },
     onMouseUp(e) {
-      // console.log('onMouseUp')
       const vm = this
       if (_.isEmpty(vm.infoBox)) return
       if (vm.infoBox.cloneItem) {
@@ -1402,9 +1637,7 @@ export default {
       newY = newY > 0 ? newY : 1
       debounce((function(newX, oldX, newY, oldY, addSizex, addSizey) {
         return function() {
-          // console.log('move1')
           if (newX !== oldX || oldY !== newY) {
-            // console.log('move2')
             movePlayer.call(vm, resizeItem, {
               x: newX,
               y: newY
@@ -1437,9 +1670,7 @@ export default {
       newY = newY > 0 ? newY : 1
       debounce((function(newX, oldX, newY, oldY) {
         return function() {
-          // console.log('move1')
           if (newX !== oldX || oldY !== newY) {
-            // console.log('move2')
             movePlayer.call(vm, moveItem, {
               x: newX,
               y: newY
@@ -1458,11 +1689,11 @@ export default {
 
     },
     /**
-     * 计算当前item的位置和大小
-     *
-     * @param {any} item
-     * @returns
-     */
+       * 计算当前item的位置和大小
+       *
+       * @param {any} item
+       * @returns
+       */
     nowItemStyle(item, index) {
       return {
         width: (this.cellWidth * (item.sizex) - this.baseMarginLeft) + 'px',
@@ -1485,23 +1716,19 @@ export default {
       return finalList
     },
     /**
-     * 获取x最大值
-     *
-     * @returns
-     */
+       * 获取x最大值
+       *
+       * @returns
+       */
     getMaxCell() {
-      // console.log('getMaxCell:')
-
       return this.maxCell
     },
     /**
-     * 获取渲染状态
-     *
-     * @returns
-     */
+       * 获取渲染状态
+       *
+       * @returns
+       */
     getRenderState() {
-      // console.log('getRenderState:')
-
       return this.moveAnimate
     },
     addItem: addItem,
@@ -1516,7 +1743,6 @@ export default {
       }, 100)
     },
     addItemBox(item) {
-      // console.log('addItemBox:' + JSON.stringify(item))
       this.yourList.push(item)
 
       this.$nextTick(function() {
@@ -1524,7 +1750,6 @@ export default {
       })
     },
     removeLastItem() {
-      // console.log('rlI:' + JSON.stringify(this.yourList))
       if (this.canvasStyleData.auxiliaryMatrix) {
         this.removeItem(this.yourList.length - 1)
       }
@@ -1570,55 +1795,64 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.editor {
+  .editor {
+    width: 100%;
     position: relative;
     /*background: #fff;*/
     margin: auto;
     /*会影响设置组件不能出现在最高层*/
     /*overflow-x: hidden;*/
-    background-size:100% 100% !important;
+    background-size: 100% 100% !important;
     /*transform-style:preserve-3d;*/
     .lock {
-        opacity: .5;
+      opacity: .5;
     }
-}
-.parent_transform {
-  //transform transform 会使z-index 失效；为了使编辑仪表板时 按钮一直在上面 采用transform-style 的方式
-  // transform-style 会导致 dialog 遮罩有问题 此处暂时用这个样式做控制
-  transform-style:preserve-3d;
-}
-.edit {
+  }
+
+  .parent_transform {
+    //transform transform 会使z-index 失效；为了使编辑仪表板时 按钮一直在上面 采用transform-style 的方式
+    // transform-style 会导致 dialog 遮罩有问题 此处暂时用这个样式做控制
+    transform-style: preserve-3d;
+  }
+
+  .edit {
     /*outline: 1px solid gainsboro;*/
     .component {
-        outline: none;
-        width: 100%;
-        height: 100%;
+      outline: none;
+      width: 100%;
+      height: 100%;
+      position: relative;
     }
-}
+  }
 
-.gap_class{
-   padding:3px;
-}
+  .gap_class {
+    padding: 3px;
+  }
 
-.ref-line {
-  position: absolute;
-  background-color: #70c0ff;;
-  z-index: 9999;
-}
-.v-line {
-  width: 1px;
-}
-.h-line {
-  height: 1px;
-}
-.dialog-css>>>.el-dialog__title {
-  font-size: 14px;
-}
-.dialog-css >>> .el-dialog__header {
-  padding: 20px 20px 0;
-}
-.dialog-css >>> .el-dialog__body {
-  padding: 10px 20px 20px;
-}
+  .ref-line {
+    position: absolute;
+    background-color: #70c0ff;;
+    z-index: 9999;
+  }
+
+  .v-line {
+    width: 1px;
+  }
+
+  .h-line {
+    height: 1px;
+  }
+
+  .dialog-css ::v-deep .el-dialog__title {
+    font-size: 14px;
+  }
+
+  .dialog-css ::v-deep .el-dialog__header {
+    padding: 40px 20px 0;
+  }
+
+  .dialog-css ::v-deep .el-dialog__body {
+    padding: 10px 20px 20px;
+  }
 
 </style>

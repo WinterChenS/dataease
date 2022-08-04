@@ -1,20 +1,7 @@
 <template>
-  <de-container>
-    <de-aside-container>
+  <de-container class="content-container">
+    <de-aside-container class="template-aside-container" is-template>
       <el-tabs v-model="currentTemplateType" @tab-click="handleClick">
-        <el-tab-pane name="system">
-          <span slot="label"><i class="el-icon-document tablepanel-i" /> {{ $t('panel.sys_template') }}</span>
-          <template-list
-            v-if="currentTemplateType==='system'"
-            :template-type="currentTemplateType"
-            :template-list="templateList"
-            @templateDelete="templateDelete"
-            @templateEdit="templateEdit"
-            @showCurrentTemplate="showCurrentTemplate"
-            @templateImport="templateImport"
-            @showTemplateEditDialog="showTemplateEditDialog"
-          />
-        </el-tab-pane>
         <el-tab-pane name="self">
           <span slot="label"><i class="el-icon-star-off tablepanel-i" />{{ $t('panel.user_template') }}</span>
           <!--v-if 重新渲染 强制刷新首行高亮属性-->
@@ -29,9 +16,22 @@
             @showTemplateEditDialog="showTemplateEditDialog"
           />
         </el-tab-pane>
+        <el-tab-pane v-permission="['sys-template:read']" name="system">
+          <span slot="label" v-permission="['sys-template:read']"><i class="el-icon-document tablepanel-i" /> {{ $t('panel.sys_template') }}</span>
+          <template-list
+            v-if="currentTemplateType==='system'"
+            :template-type="currentTemplateType"
+            :template-list="templateList"
+            @templateDelete="templateDelete"
+            @templateEdit="templateEdit"
+            @showCurrentTemplate="showCurrentTemplate"
+            @templateImport="templateImport"
+            @showTemplateEditDialog="showTemplateEditDialog"
+          />
+        </el-tab-pane>
       </el-tabs>
     </de-aside-container>
-    <de-main-container>
+    <de-main-container v-loading="$store.getters.loadingMap[$store.getters.currentPath]">
       <template-item
         v-for="item in currentTemplateShowList"
         :key="item.id"
@@ -81,7 +81,7 @@ export default {
       showShare: false,
       currentTemplateShowList: [],
       currentPid: '',
-      currentTemplateType: 'system',
+      currentTemplateType: 'self',
       templateEditFormRules: {
         name: [
           { required: true, message: this.$t('commons.input_content'), trigger: 'change' },
@@ -211,4 +211,13 @@ export default {
     height: 100%;
   }
 
+  .content-container{
+    padding: 20px!important;
+    overflow: hidden;
+    height: calc(100vh - 56px)!important;
+  }
+
+  .template-aside-container{
+    height: calc(100vh - 96px)!important;
+  }
 </style>

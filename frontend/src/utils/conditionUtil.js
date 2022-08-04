@@ -26,10 +26,22 @@ export const valueValid = condition => {
 }
 
 export const formatCondition = obj => {
-  const { component, value, operator } = obj
-  const fieldId = component.options.attrs.fieldId
+  const { component, value, operator, isTree } = obj
+
+  let fieldId = component.options.attrs.fieldId
   const viewIds = component.options.attrs.viewIds
-  const condition = new Condition(component.id, fieldId, operator, value, viewIds)
+  const parameters = component.options.attrs.parameters
+  if (isTree && !component.options.attrs.multiple && value && value.length) {
+    // 单选树
+    const val = value[0]
+    if (val) {
+      const len = val.split(',').length
+      if (len) {
+        fieldId = fieldId.split(',').slice(0, len).join(',')
+      }
+    }
+  }
+  const condition = new Condition(component.id, fieldId, operator, value, viewIds, parameters, isTree)
   return condition
 }
 
@@ -39,8 +51,8 @@ export const formatLinkageCondition = obj => {
   return condition
 }
 
-export const buildFilterMap = panelItems => {
-  const viewIdMatch = (viewIds, viewId) => !viewIds || viewIds.length === 0 || viewIds.includes(viewId)
+export const viewIdMatch = (viewIds, viewId) => !viewIds || viewIds.length === 0 || viewIds.includes(viewId)
+export const buildViewKeyMap = panelItems => {
   const result = {}
   panelItems.forEach(element => {
     if (element.type === 'view') {
@@ -54,12 +66,18 @@ export const buildFilterMap = panelItems => {
       })
     }
   })
-  panelItems.forEach(element => {
+  return result
+}
+
+export const buildViewKeyFilters = (panelItems, result) => {
+  panelItems.forEach((element, index) => {
     if (element.type !== 'custom') {
       return true
     }
+
+    let param = null
     const widget = ApplicationContext.getService(element.serviceName)
-    const param = widget.getParam(element)
+    param = widget.getParam(element)
     const condition = formatCondition(param)
     const vValid = valueValid(condition)
     const filterComponentId = condition.componentId
@@ -76,5 +94,11 @@ export const buildFilterMap = panelItems => {
       vidMatch && vValid && viewFilters.push(condition)
     })
   })
+  return result
+}
+export const buildFilterMap = panelItems => {
+  let result = buildViewKeyMap(panelItems)
+
+  result = buildViewKeyFilters(panelItems, result)
   return result
 }

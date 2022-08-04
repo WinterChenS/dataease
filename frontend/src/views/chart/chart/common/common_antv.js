@@ -1,4 +1,5 @@
 import { hexColorToRGBA } from '@/views/chart/chart/util'
+import { formatterItem, valueFormatter } from '@/views/chart/chart/formatter'
 
 export function getPadding(chart) {
   if (chart.drill) {
@@ -10,7 +11,7 @@ export function getPadding(chart) {
 // color,label,tooltip,axis,legend,background
 export function getTheme(chart) {
   const colors = []
-  let bgColor, labelFontsize, labelColor, tooltipColor, tooltipFontsize, legendColor, legendFontsize
+  let bgColor, labelFontsize, labelColor, tooltipColor, tooltipFontsize, tooltipBackgroundColor, legendColor, legendFontsize
   let customAttr = {}
   if (chart.customAttr) {
     customAttr = JSON.parse(chart.customAttr)
@@ -32,6 +33,7 @@ export function getTheme(chart) {
       const t = JSON.parse(JSON.stringify(customAttr.tooltip))
       tooltipColor = t.textStyle.color
       tooltipFontsize = t.textStyle.fontSize
+      tooltipBackgroundColor = t.backgroundColor
     }
   }
 
@@ -83,7 +85,8 @@ export function getTheme(chart) {
         domStyles: {
           'g2-tooltip': {
             color: tooltipColor,
-            fontSize: tooltipFontsize + 'px'
+            fontSize: tooltipFontsize + 'px',
+            background: tooltipBackgroundColor
           }
         }
       },
@@ -129,6 +132,31 @@ export function getLabel(chart) {
           fill: l.color,
           fontSize: parseInt(l.fontSize)
         }
+        // label value formatter
+        if (chart.type && chart.type !== 'waterfall') {
+          label.formatter = function(param) {
+            let yAxis
+            let res = param.value
+            try {
+              yAxis = JSON.parse(chart.yaxis)
+            } catch (e) {
+              yAxis = JSON.parse(JSON.stringify(chart.yaxis))
+            }
+
+            for (let i = 0; i < yAxis.length; i++) {
+              const f = yAxis[i]
+              if (f.name === param.category) {
+                if (f.formatterCfg) {
+                  res = valueFormatter(param.value, f.formatterCfg)
+                } else {
+                  res = valueFormatter(param.value, formatterItem)
+                }
+                break
+              }
+            }
+            return res
+          }
+        }
       } else {
         label = false
       }
@@ -147,6 +175,68 @@ export function getTooltip(chart) {
       const t = JSON.parse(JSON.stringify(customAttr.tooltip))
       if (t.show) {
         tooltip = {}
+        // tooltip value formatter
+        if (chart.type && chart.type !== 'waterfall') {
+          tooltip.formatter = function(param) {
+            let yAxis
+            let res
+            try {
+              yAxis = JSON.parse(chart.yaxis)
+            } catch (e) {
+              yAxis = JSON.parse(JSON.stringify(chart.yaxis))
+            }
+
+            let obj
+            if (chart.type === 'word-cloud') {
+              obj = { name: param.text, value: param.value }
+              for (let i = 0; i < yAxis.length; i++) {
+                const f = yAxis[i]
+                if (f.formatterCfg) {
+                  res = valueFormatter(param.value, f.formatterCfg)
+                } else {
+                  res = valueFormatter(param.value, formatterItem)
+                }
+              }
+            } else if (chart.type.includes('treemap')) {
+              obj = { name: param.name, value: param.value }
+              for (let i = 0; i < yAxis.length; i++) {
+                const f = yAxis[i]
+                if (f.formatterCfg) {
+                  res = valueFormatter(param.value, f.formatterCfg)
+                } else {
+                  res = valueFormatter(param.value, formatterItem)
+                }
+              }
+            } else if (chart.type.includes('pie') || chart.type.includes('funnel')) {
+              obj = { name: param.field, value: param.value }
+              for (let i = 0; i < yAxis.length; i++) {
+                const f = yAxis[i]
+                if (f.formatterCfg) {
+                  res = valueFormatter(param.value, f.formatterCfg)
+                } else {
+                  res = valueFormatter(param.value, formatterItem)
+                }
+              }
+            } else if (chart.type.includes('bar') || chart.type.includes('line') || chart.type.includes('scatter') || chart.type.includes('radar')) {
+              obj = { name: param.category, value: param.value }
+              for (let i = 0; i < yAxis.length; i++) {
+                const f = yAxis[i]
+                if (f.name === param.category) {
+                  if (f.formatterCfg) {
+                    res = valueFormatter(param.value, f.formatterCfg)
+                  } else {
+                    res = valueFormatter(param.value, formatterItem)
+                  }
+                  break
+                }
+              }
+            } else {
+              res = param.value
+            }
+            obj.value = res
+            return obj
+          }
+        }
       } else {
         tooltip = false
       }
@@ -267,6 +357,17 @@ export function getXAxis(chart) {
           style: {
             fill: a.axisLabel.color,
             fontSize: parseInt(a.axisLabel.fontSize)
+          },
+          formatter: function(value) {
+            if (chart.type.includes('horizontal')) {
+              if (!a.axisLabelFormatter) {
+                return valueFormatter(value, formatterItem)
+              } else {
+                return valueFormatter(value, a.axisLabelFormatter)
+              }
+            } else {
+              return value
+            }
           }
         } : null
 
@@ -327,6 +428,21 @@ export function getYAxis(chart) {
           style: {
             fill: a.axisLabel.color,
             fontSize: parseInt(a.axisLabel.fontSize)
+          },
+          formatter: function(value) {
+            if (chart.type === 'waterfall') {
+              return value
+            } else {
+              if (!chart.type.includes('horizontal')) {
+                if (!a.axisLabelFormatter) {
+                  return valueFormatter(value, formatterItem)
+                } else {
+                  return valueFormatter(value, a.axisLabelFormatter)
+                }
+              } else {
+                return value
+              }
+            }
           }
         } : null
 
@@ -421,9 +537,9 @@ function transAxisPosition(chart, axis) {
   if (chart.type.includes('horizontal')) {
     switch (axis.position) {
       case 'top':
-        return 'right'
-      case 'bottom':
         return 'left'
+      case 'bottom':
+        return 'right'
       case 'left':
         return 'bottom'
       case 'right':
@@ -459,7 +575,18 @@ export function getAnalyse(chart) {
   if (chart.senior && chart.type && (chart.type.includes('bar') || chart.type.includes('line') || chart.type.includes('mix'))) {
     senior = JSON.parse(chart.senior)
     if (senior.assistLine && senior.assistLine.length > 0) {
+      const customStyle = JSON.parse(chart.customStyle)
+      let xAxisPosition, yAxisPosition
+      if (customStyle.xAxis) {
+        const a = JSON.parse(JSON.stringify(customStyle.xAxis))
+        xAxisPosition = transAxisPosition(chart, a)
+      }
+      if (customStyle.yAxis) {
+        const a = JSON.parse(JSON.stringify(customStyle.yAxis))
+        yAxisPosition = transAxisPosition(chart, a)
+      }
       senior.assistLine.forEach(ele => {
+        const content = ele.name + ' : ' + parseFloat(ele.value)
         assistLine.push({
           type: 'line',
           start: ['start', parseFloat(ele.value)],
@@ -469,18 +596,34 @@ export function getAnalyse(chart) {
             lineDash: getLineDash(ele.lineType)
           }
         })
-        assistLine.push({
-          type: 'text',
-          position: ['start', parseFloat(ele.value)],
-          content: parseFloat(ele.value),
-          offsetY: -2,
-          offsetX: 2,
-          style: {
-            textBaseline: 'bottom',
-            fill: ele.color,
-            fontSize: 10
-          }
-        })
+        if (!chart.type.includes('horizontal')) {
+          assistLine.push({
+            type: 'text',
+            position: [yAxisPosition === 'left' ? 'start' : 'end', parseFloat(ele.value)],
+            content: content,
+            offsetY: -2,
+            offsetX: yAxisPosition === 'left' ? 2 : -10 * (content.length - 2),
+            style: {
+              textBaseline: 'bottom',
+              fill: ele.color,
+              fontSize: 10
+            }
+          })
+        } else {
+          assistLine.push({
+            type: 'text',
+            position: [xAxisPosition === 'left' ? 'start' : 'end', parseFloat(ele.value)],
+            content: content,
+            offsetY: xAxisPosition === 'left' ? -2 : -10 * (content.length - 2),
+            offsetX: 2,
+            rotate: Math.PI / 2,
+            style: {
+              textBaseline: 'bottom',
+              fill: ele.color,
+              fontSize: 10
+            }
+          })
+        }
       })
     }
   }

@@ -3,8 +3,12 @@ package io.dataease.auth.aop;
 import io.dataease.auth.annotation.DePermission;
 import io.dataease.auth.annotation.DePermissions;
 import io.dataease.auth.entity.AuthItem;
+import io.dataease.auth.util.ReflectUtil;
+import io.dataease.commons.constants.DePermissionType;
 import io.dataease.commons.utils.AuthUtils;
-import io.dataease.commons.utils.LogUtil;
+import io.dataease.dto.log.FolderItem;
+import io.dataease.i18n.Translator;
+import io.dataease.service.sys.log.LogManager;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.authz.UnauthorizedException;
@@ -15,8 +19,8 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.lang.reflect.Array;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,73 +29,70 @@ import java.util.stream.Collectors;
 @Component
 public class DePermissionAnnotationHandler {
 
-    @Around(value = "@annotation(io.dataease.auth.annotation.DePermissions)")
-    public Object PermissionsAround(ProceedingJoinPoint point) {
+    @Resource
+    private LogManager logManager;
 
-        try {
-            if (AuthUtils.getUser().getIsAdmin()) {
-                return point.proceed(point.getArgs());
-            }
-            MethodSignature ms = (MethodSignature) point.getSignature();
-            Method method = ms.getMethod();
-            DePermissions annotation = method.getAnnotation(DePermissions.class);
-            Logical logical = annotation.logical();
-            DePermission[] dePermissions = annotation.value();
-            Object[] args = point.getArgs();
-            if (logical == Logical.AND) {
-                for (int i = 0; i < dePermissions.length; i++) {
-                    DePermission permission = dePermissions[i];
-                    boolean currentAccess = access(args[permission.paramIndex()], permission, 0);
-                    if (!currentAccess) {
-                        return null;
-                    }
-                }
-            } else {
-                List<Exception> exceptions = new ArrayList<>();
-                Boolean someAccess = false;
-                for (int i = 0; i < dePermissions.length; i++) {
-                    DePermission permission = dePermissions[i];
-                    try {
-                        boolean currentAccess = access(args[permission.paramIndex()], permission, 0);
-                        if (currentAccess) {
-                            someAccess = true;
-                            break;
-                        }
-                    } catch (Exception e) {
-                        exceptions.add(e);
-                    }
-                }
-                if (!someAccess) {
-                    throw exceptions.get(0);
-                }
-            }
+    @Around(value = "@annotation(io.dataease.auth.annotation.DePermissions)")
+    public Object PermissionsAround(ProceedingJoinPoint point) throws Throwable {
+
+        if (AuthUtils.getUser().getIsAdmin()) {
             return point.proceed(point.getArgs());
-        } catch (Throwable throwable) {
-            LogUtil.error(throwable.getMessage(), throwable);
-            throw new RuntimeException(throwable.getMessage());
         }
+        Boolean access = false;
+        MethodSignature ms = (MethodSignature) point.getSignature();
+        Method method = ms.getMethod();
+        DePermissions annotation = method.getAnnotation(DePermissions.class);
+        Logical logical = annotation.logical();
+        DePermission[] dePermissions = annotation.value();
+        Object[] args = point.getArgs();
+        if (logical == Logical.AND) {
+            access = true;
+            for (int i = 0; i < dePermissions.length; i++) {
+                DePermission permission = dePermissions[i];
+                boolean currentAccess = access(args[permission.paramIndex()], permission, 0);
+                if (!currentAccess) {
+                    access = false;
+                    break;
+                }
+            }
+        } else {
+            List<Exception> exceptions = new ArrayList<>();
+            for (int i = 0; i < dePermissions.length; i++) {
+                DePermission permission = dePermissions[i];
+                try {
+                    boolean currentAccess = access(args[permission.paramIndex()], permission, 0);
+                    if (currentAccess) {
+                        access = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    exceptions.add(e);
+                }
+            }
+            if (!access && exceptions.size() > 0) {
+                throw exceptions.get(0);
+            }
+        }
+
+        return access ? point.proceed(point.getArgs()) : null;
     }
 
     @Around(value = "@annotation(io.dataease.auth.annotation.DePermission)")
-    public Object PermissionAround(ProceedingJoinPoint point) {
-        try {
-            if (AuthUtils.getUser().getIsAdmin()) {
-                return point.proceed(point.getArgs());
-            }
-            MethodSignature ms = (MethodSignature) point.getSignature();
-            Method method = ms.getMethod();
+    public Object PermissionAround(ProceedingJoinPoint point) throws Throwable {
+        Boolean access = false;
 
-            DePermission annotation = method.getAnnotation(DePermission.class);
-            Object arg = point.getArgs()[annotation.paramIndex()];
-            if (access(arg, annotation, 0)) {
-                return point.proceed(point.getArgs());
-            }
-            return false;
-
-        } catch (Throwable throwable) {
-            LogUtil.error(throwable.getMessage(), throwable);
-            throw new RuntimeException(throwable.getMessage());
+        if (AuthUtils.getUser().getIsAdmin()) {
+            return point.proceed(point.getArgs());
         }
+        MethodSignature ms = (MethodSignature) point.getSignature();
+        Method method = ms.getMethod();
+        DePermission annotation = method.getAnnotation(DePermission.class);
+        Object arg = point.getArgs()[annotation.paramIndex()];
+        if (access(arg, annotation, 0)) {
+            access = true;
+        }
+
+        return access ? point.proceed(point.getArgs()) : null;
     }
 
     private Boolean access(Object arg, DePermission annotation, int layer) throws Exception {
@@ -100,26 +101,22 @@ public class DePermissionAnnotationHandler {
         String type = annotation.type().name().toLowerCase();
         String value = annotation.value();
         Integer requireLevel = annotation.level().getLevel();
-
         Set<String> resourceIds = AuthUtils.permissionByType(type).stream().filter(
                 item -> item.getLevel() >= requireLevel).map(AuthItem::getAuthSource).collect(Collectors.toSet());
-
         Class<?> parameterType = arg.getClass();
-        if (parameterType.isPrimitive() || isWrapClass(parameterType) || isString(parameterType)) {
+        if (parameterType.isPrimitive() || ReflectUtil.isWrapClass(parameterType) || ReflectUtil.isString(parameterType)) {
             boolean permissionValid = resourceIds.contains(arg);
             if (permissionValid)
                 return true;
-            throw new UnauthorizedException("Subject does not have permission[" + annotation.level().name() + ":"
-                    + annotation.type() + ":" + arg + "]");
-        } else if (isArray(parameterType)) {
+            throw new UnauthorizedException(msgI18n(arg, annotation));
+        } else if (ReflectUtil.isArray(parameterType)) {
             for (int i = 0; i < Array.getLength(arg); i++) {
                 Object o = Array.get(arg, i);
                 if (!access(o, annotation, layer)) {
                     return false;
                 }
             }
-
-        } else if (isCollection(parameterType)) {
+        } else if (ReflectUtil.isCollection(parameterType)) {
             Object[] array = ((Collection) arg).toArray();
             for (int i = 0; i < array.length; i++) {
                 Object o = array[i];
@@ -127,7 +124,7 @@ public class DePermissionAnnotationHandler {
                     return false;
                 }
             }
-        } else if (isMap(parameterType)) {
+        } else if (ReflectUtil.isMap(parameterType)) {
             Map<String, Object> argMap = (Map) arg;
             String[] values = value.split(".");
             Object o = argMap.get(values[layer]);
@@ -136,60 +133,32 @@ public class DePermissionAnnotationHandler {
             // 当作自定义类处理
             String[] values = value.split("\\.");
             String fieldName = values[layer];
-
-            Object fieldValue = getFieldValue(arg, fieldName);
+            Object fieldValue = ReflectUtil.getFieldValue(arg, fieldName);
             return access(fieldValue, annotation, ++layer);
 
         }
         return true;
     }
 
-    private Object getFieldValue(Object o, String fieldName) throws Exception {
-        Class<?> aClass = o.getClass();
-        while (null != aClass.getSuperclass()) {
-            Field[] declaredFields = aClass.getDeclaredFields();
-            for (int i = 0; i < declaredFields.length; i++) {
-                Field field = declaredFields[i];
-                String name = field.getName();
-                if (StringUtils.equals(name, fieldName)) {
-                    field.setAccessible(true);
-                    return field.get(o);
-                }
-            }
-            aClass = aClass.getSuperclass();
+    private String msgI18n(Object arg, DePermission annotation) {
+        int sourceTypeValue = 0;
+        DePermissionType type = annotation.type();
+        if (type == DePermissionType.DATASOURCE) {
+            sourceTypeValue = 1;
         }
-        throw new NoSuchFieldException(fieldName);
+        if (type == DePermissionType.DATASET) {
+            sourceTypeValue = 2;
+        }
+        if (type == DePermissionType.PANEL) {
+            sourceTypeValue = 3;
+        }
+        String name = arg.toString();
+        if (sourceTypeValue > 0) {
+            FolderItem sourceInfo = logManager.nameWithId(arg.toString(), sourceTypeValue);
+            if (ObjectUtils.isNotEmpty(sourceInfo))
+                name = StringUtils.isNotBlank(sourceInfo.getName()) ? sourceInfo.getName() : arg.toString();
+        }
+        String msg = Translator.get("I18N_NO_PERMISSION") + "[" + Translator.get("I18N_" + annotation.level().name()) + ": " + Translator.get("SOURCE_TYPE_" + annotation.type().name()) + ": " + name + "]," + Translator.get("I18N_PLEASE_CONCAT_ADMIN");
+        return msg;
     }
-
-    private final static String[] wrapClasies = {
-            "java.lang.Boolean",
-            "java.lang.Character",
-            "java.lang.Integer",
-            "java.lang.Byte",
-            "java.lang.Short",
-            "java.lang.Long",
-            "java.lang.Float",
-            "java.lang.Double",
-    };
-
-    private Boolean isString(Class clz) {
-        return StringUtils.equals("java.lang.String", clz.getName());
-    }
-
-    private Boolean isArray(Class clz) {
-        return clz.isArray();
-    }
-
-    private Boolean isCollection(Class clz) {
-        return Collection.class.isAssignableFrom(clz);
-    }
-
-    private Boolean isMap(Class clz) {
-        return Map.class.isAssignableFrom(clz);
-    }
-
-    private Boolean isWrapClass(Class clz) {
-        return Arrays.stream(wrapClasies).anyMatch(item -> StringUtils.equals(item, clz.getName()));
-    }
-
 }

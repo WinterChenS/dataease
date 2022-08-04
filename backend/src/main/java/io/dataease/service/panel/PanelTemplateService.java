@@ -1,8 +1,6 @@
 package io.dataease.service.panel;
 
-import io.dataease.base.domain.*;
-import io.dataease.base.mapper.PanelTemplateMapper;
-import io.dataease.base.mapper.ext.ExtPanelTemplateMapper;
+import io.dataease.ext.ExtPanelTemplateMapper;
 import io.dataease.commons.constants.CommonConstants;
 import io.dataease.commons.utils.AuthUtils;
 import io.dataease.commons.utils.BeanUtils;
@@ -10,6 +8,11 @@ import io.dataease.controller.request.panel.PanelTemplateRequest;
 import io.dataease.dto.panel.PanelTemplateDTO;
 import io.dataease.exception.DataEaseException;
 import io.dataease.i18n.Translator;
+import io.dataease.plugins.common.base.domain.PanelTemplate;
+import io.dataease.plugins.common.base.domain.PanelTemplateExample;
+import io.dataease.plugins.common.base.domain.PanelTemplateWithBLOBs;
+import io.dataease.plugins.common.base.mapper.PanelTemplateMapper;
+import io.dataease.service.staticResource.StaticResourceService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +23,8 @@ import javax.annotation.Resource;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import static io.dataease.commons.constants.StaticResourceConstants.UPLOAD_URL_PREFIX;
 
 /**
  * Author: wangjiahao
@@ -33,6 +38,8 @@ public class PanelTemplateService {
     private PanelTemplateMapper panelTemplateMapper;
     @Resource
     private ExtPanelTemplateMapper extPanelTemplateMapper;
+    @Resource
+    private StaticResourceService staticResourceService;
 
     public List<PanelTemplateDTO> templateList(PanelTemplateRequest panelTemplateRequest) {
         panelTemplateRequest.setWithBlobs("N");
@@ -73,6 +80,14 @@ public class PanelTemplateService {
                 exampleDelete.createCriteria().andPidEqualTo(request.getPid()).andNameEqualTo(request.getName());
                 panelTemplateMapper.deleteByExample(exampleDelete);
             }
+            if ("template".equals(request.getNodeType())) {
+                //Store static resource into the server
+                staticResourceService.saveFilesToServe(request.getStaticResource());
+                String snapshotName = "template-" + request.getId() + ".jpeg";
+                staticResourceService.saveSingleFileToServe(snapshotName, request.getSnapshot().replace("data:image/jpeg;base64,", ""));
+                request.setSnapshot("/" + UPLOAD_URL_PREFIX + '/' + snapshotName);
+            }
+
             panelTemplateMapper.insert(request);
         } else {
             String nameCheckResult = this.nameCheck(CommonConstants.OPT_TYPE.UPDATE, request.getName(), request.getPid(), request.getId());

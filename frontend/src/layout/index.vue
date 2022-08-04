@@ -4,8 +4,8 @@
     <topbar v-if="!fullHeightFlag && finishLoad" :show-tips="showTips" />
 
     <de-container :style="mainStyle">
-      <de-aside-container v-if="!sidebar.hide" class="le-aside-container">
-        <sidebar class="sidebar-container" />
+      <de-aside-container v-if="!sidebar.hide" :isCollapseWidth="sideWidth" type="system" class="le-aside-container">
+        <sidebar @changeSideWidth="(side) => sideWidth = side"  class="sidebar-container" />
       </de-aside-container>
 
       <de-main-container class="la-main-container" :class="{'full-height':fullHeightFlag}">
@@ -15,6 +15,7 @@
     <div v-if="showTips" class="pwd-tips">
       <span>{{ $t('commons.first_login_tips') }}</span>
       <div style="text-align: right; margin-bottom: 10px;">
+        <el-button size="mini" :disabled="buttonDisable" style="padding-right: 65px;" type="text" @click="doNotNoti">{{ $t('commons.donot_noti') }}</el-button>
         <el-button type="primary" size="mini" @click="showTips = false">{{ $t('commons.roger_that') }}</el-button>
       </div>
       <div class="arrow" />
@@ -31,7 +32,7 @@ import DeContainer from '@/components/dataease/DeContainer'
 import DeAsideContainer from '@/components/dataease/DeAsideContainer'
 import bus from '@/utils/bus'
 
-import { needModifyPwd } from '@/api/user'
+import { needModifyPwd, removePwdTips } from '@/api/user'
 
 export default {
   name: 'Layout',
@@ -49,7 +50,9 @@ export default {
     return {
       componentName: 'PanelMain',
       showTips: false,
-      finishLoad: false
+      finishLoad: false,
+      buttonDisable: false,
+      sideWidth: "",
     }
   },
   computed: {
@@ -97,13 +100,26 @@ export default {
     })
   },
   mounted() {
-    bus.$on('PanelSwitchComponent', (c) => {
-      this.componentName = c.name
-    })
+    bus.$on('PanelSwitchComponent', this.panelSwitchComponent)
+  },
+  beforeDestroy() {
+    bus.$off('PanelSwitchComponent', this.panelSwitchComponent)
   },
   methods: {
+    panelSwitchComponent(c) {
+      this.componentName = c.name
+    },
     handleClickOutside() {
       this.$store.dispatch('app/closeSideBar', { withoutAnimation: false })
+    },
+    doNotNoti() {
+      this.buttonDisable = true
+      removePwdTips().then(res => {
+        this.showTips = false
+        this.buttonDisable = false
+      }).catch(e => {
+        this.buttonDisable = false
+      })
     }
   }
 }
@@ -159,13 +175,13 @@ export default {
   }
   .le-aside-container {
       .sidebar-container {
-        width: 100% !important;
-        position: initial !important;
-        height: calc(100vh - 80px) !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
+        width: 100%;
+        position: relative !important;
+        height: 100%;
+        top: 0 !important;
         background-color: var(--SiderBG) !important;
       }
+      overflow: hidden;
   }
   .full-height {
     height: 100vh !important;

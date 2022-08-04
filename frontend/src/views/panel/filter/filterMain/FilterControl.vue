@@ -6,11 +6,43 @@
           v-if="widget.showSwitch"
           v-model="attrs.multiple"
           :active-text="$t('panel.multiple_choice')"
-          :inactive-text="$t('panel.single_choice')"
           @change="multipleChange"
         />
+
+        <span v-if="widget.isTimeWidget && widget.isTimeWidget()" style="padding-left: 10px;">
+          <el-checkbox v-model="attrs.showTime" @change="showTimeChange">
+            <span>{{ $t('panel.show_time') }} </span>
+          </el-checkbox>
+
+          <el-popover v-model="timePopovervisible" placement="bottom-end" :disabled="!attrs.showTime" width="140">
+            <div style="width: 100%;overflow-y: auto;overflow-x: hidden;word-break: break-all;position: relative;">
+              <ul class="de-ul">
+                <li
+                  v-for="(node, i) in accuracyOptions"
+                  :key="node.id"
+                  :index="i"
+                  class="de-sort-field-span"
+                  :class="attrs.accuracy === node.id ? 'de-active-li': ''"
+                  @click="attrs.accuracy = node.id"
+                >
+
+                  <span>{{ node.name }}</span>
+                </li>
+              </ul>
+
+            </div>
+
+            <i
+              slot="reference"
+              :class="{'i-filter-active': attrs.showTime, 'i-filter-inactive': !attrs.showTime}"
+              class="el-icon-setting i-filter"
+            />
+          </el-popover>
+        </span>
+
       </div>
     </el-col>
+
     <el-col :span="16">
       <div class="filter-options-right">
         <span style="padding-right: 10px;">
@@ -60,6 +92,37 @@
             />
           </el-popover>
         </span>
+        <span v-if="element.component === 'de-select'" style="padding-left: 10px;">
+          <el-checkbox v-model="attrs.enableParameters" @change="enableParametersChange"><span>
+            {{ $t('panel.binding_parameters') }} </span> </el-checkbox>
+
+          <el-popover placement="bottom-end" :disabled="!attrs.enableParameters" width="200">
+            <div class="view-container-class">
+              <el-checkbox-group v-model="attrs.parameters">
+                <el-checkbox
+                  v-for="(item ) in childViews.datasetParams"
+                  :key="item.variableName"
+                  :label="item.variableName"
+                  class="de-checkbox"
+                >
+                  <div class="span-div">
+                    <span v-if="item.variableName && item.variableName.length <= 7" style="margin-left: 6px">{{ item.variableName }}</span>
+                    <el-tooltip v-else class="item" effect="dark" :content="item.variableName" placement="left">
+                      <span style="margin-left: 6px">{{ item.variableName }}</span>
+                    </el-tooltip>
+                  </div>
+
+                </el-checkbox>
+              </el-checkbox-group>
+            </div>
+
+            <i
+              slot="reference"
+              :class="{'i-filter-active': attrs.enableParameters, 'i-filter-inactive': !attrs.enableParameters}"
+              class="el-icon-setting i-filter"
+            />
+          </el-popover>
+        </span>
       </div>
 
     </el-col>
@@ -67,7 +130,6 @@
 </template>
 
 <script>
-import {mapState} from "vuex";
 
 export default {
   name: 'FilterControl',
@@ -94,9 +156,20 @@ export default {
     return {
       attrs: null,
       titlePopovervisible: false,
-      popovervisible: false
+      popovervisible: false,
+      parametersVisible: false,
+      timePopovervisible: false,
+      accuracyOptions: [
+        { id: 'HH', name: 'HH' },
+        { id: 'HH:mm', name: 'HH:mm' },
+        { id: 'HH:mm:ss', name: 'HH:mm:ss' }
+
+      ]
 
     }
+  },
+  computed: {
+
   },
 
   created() {
@@ -104,6 +177,11 @@ export default {
   },
   methods: {
     multipleChange(value) {
+      this.fillAttrs2Filter()
+    },
+    showTimeChange(value) {
+      this.attrs.accuracy = this.accuracyOptions[1].id
+      this.attrs.default.isDynamic = false
       this.fillAttrs2Filter()
     },
     checkedViewsChange(values) {
@@ -115,11 +193,20 @@ export default {
       }
       this.fillAttrs2Filter()
     },
+    enableParametersChange(value) {
+      if (!value) {
+        this.attrs.parameters = []
+      }
+      this.fillAttrs2Filter()
+    },
     showTitleChange(value) {
       if (!value) {
         this.attrs.title = ''
         this.element.style.backgroundColor = ''
       }
+      this.fillAttrs2Filter()
+    },
+    showVisualChange(value) {
       this.fillAttrs2Filter()
     },
 
@@ -181,5 +268,39 @@ export default {
     text-overflow: ellipsis;
     overflow: hidden;
   }
+
+.de-ul li {
+  margin: 5px 2px;
+  cursor: pointer;
+
+  &:hover {
+    color: #409EFF;
+    border-color: rgb(198, 226, 255);
+    background-color: rgb(236, 245, 255);
+  }
+
+  &:before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    display: inline-block;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: 5px;
+  }
+}
+
+.de-active-li {
+  &:before {
+    background: #409EFF;
+  }
+}
+
+.de-sort-field-span {
+  display: inline-flexbox;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 </style>

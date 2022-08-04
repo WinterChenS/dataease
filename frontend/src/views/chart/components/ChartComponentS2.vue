@@ -2,13 +2,16 @@
   <div ref="chartContainer" style="padding: 0;width: 100%;height: 100%;overflow: hidden;" :style="bg_class">
     <view-track-bar ref="viewTrack" :track-menu="trackMenu" class="track-bar" :style="trackBarStyleTime" @trackClick="trackClick" />
     <span v-if="chart.type" v-show="title_show" ref="title" :style="title_class" style="cursor: default;display: block;">
-      <p style="padding:6px 10px 0 10px;margin: 0;overflow: hidden;white-space: pre;text-overflow: ellipsis;">{{ chart.title }}</p>
+      <div>
+        <p style="padding:6px 4px 0;margin: 0;overflow: hidden;white-space: pre;text-overflow: ellipsis;display: inline;">{{ chart.title }}</p>
+        <title-remark v-if="remarkCfg.show" style="text-shadow: none!important;" :remark-cfg="remarkCfg" />
+      </div>
     </span>
     <div ref="tableContainer" style="width: 100%;overflow: hidden;" :style="{background:container_bg_class.background}">
       <div v-if="chart.type === 'table-normal'" :id="chartId" style="width: 100%;overflow: hidden;" :class="chart.drill ? 'table-dom-normal-drill' : 'table-dom-normal'" />
-      <div v-if="chart.type === 'table-info'" :id="chartId" style="width: 100%;overflow: hidden;" :class="chart.drill ? 'table-dom-info-drill' : 'table-dom-info'" />
+      <div v-if="chart.type === 'table-info'" :id="chartId" style="width: 100%;overflow: hidden;" :class="chart.drill ? (showPage ? 'table-dom-info-drill' : 'table-dom-info-drill-pull') : (showPage ? 'table-dom-info' : 'table-dom-info-pull')" />
       <div v-if="chart.type === 'table-pivot'" :id="chartId" style="width: 100%;overflow: hidden;" class="table-dom-normal" />
-      <el-row v-show="chart.type === 'table-info'" class="table-page">
+      <el-row v-show="showPage" class="table-page">
         <span class="total-style">
           {{ $t('chart.total') }}
           <span>{{ (chart.data && chart.data.tableRow)?chart.data.tableRow.length:0 }}</span>
@@ -34,12 +37,14 @@
 <script>
 import { uuid } from 'vue-uuid'
 import ViewTrackBar from '@/components/canvas/components/Editor/ViewTrackBar'
-import { hexColorToRGBA } from '@/views/chart/chart/util'
+import { getRemark, hexColorToRGBA } from '@/views/chart/chart/util'
 import { baseTableInfo, baseTableNormal, baseTablePivot } from '@/views/chart/chart/table/table-info'
+import TitleRemark from '@/views/chart/view/TitleRemark'
+import { DEFAULT_TITLE_STYLE } from '@/views/chart/chart/chart'
 
 export default {
   name: 'ChartComponentS2',
-  components: { ViewTrackBar },
+  components: { TitleRemark, ViewTrackBar },
   props: {
     chart: {
       type: Object,
@@ -87,7 +92,7 @@ export default {
         textAlign: 'left',
         fontStyle: 'normal',
         fontWeight: 'normal',
-        background: hexColorToRGBA('#ffffff', 0)
+        background: ''
       },
       container_bg_class: {
         background: hexColorToRGBA('#ffffff', 0)
@@ -99,7 +104,14 @@ export default {
         pageSize: 20,
         show: 0
       },
-      tableData: []
+      tableData: [],
+      showPage: false,
+      scrollTimer: null,
+      scrollTop: 0,
+      remarkCfg: {
+        show: false,
+        content: ''
+      }
     }
   },
 
@@ -132,20 +144,25 @@ export default {
   mounted() {
     this.preDraw()
   },
+  beforeDestroy() {
+    clearInterval(this.scrollTimer)
+  },
   methods: {
     initData() {
       let datas = []
+      this.showPage = false
       if (this.chart.data && this.chart.data.fields) {
         this.fields = JSON.parse(JSON.stringify(this.chart.data.fields))
         const attr = JSON.parse(this.chart.customAttr)
         this.currentPage.pageSize = parseInt(attr.size.tablePageSize ? attr.size.tablePageSize : 20)
         datas = JSON.parse(JSON.stringify(this.chart.data.tableRow))
-        if (this.chart.type === 'table-info') {
+        if (this.chart.type === 'table-info' && (attr.size.tablePageMode === 'page' || !attr.size.tablePageMode) && datas.length > this.currentPage.pageSize) {
           // 计算分页
           this.currentPage.show = datas.length
           const pageStart = (this.currentPage.page - 1) * this.currentPage.pageSize
           const pageEnd = pageStart + this.currentPage.pageSize
           datas = datas.slice(pageStart, pageEnd)
+          this.showPage = true
         }
       } else {
         this.fields = []
@@ -205,50 +222,30 @@ export default {
 
       if (this.myChart && this.antVRenderStatus) {
         this.myChart.render()
+        this.initScroll()
       }
       this.setBackGroundBorder()
     },
 
     antVAction(param) {
-      console.log(param, 'param')
       const cell = this.myChart.getCell(param.target)
       const meta = cell.getMeta()
-      console.log(meta, 'meta')
-
-      let xAxis = []
-      if (this.chart.xaxis) {
-        xAxis = JSON.parse(this.chart.xaxis)
-      }
-      let drillFields = []
-      if (this.chart.drillFields) {
-        try {
-          drillFields = JSON.parse(this.chart.drillFields)
-        } catch (err) {
-          drillFields = JSON.parse(JSON.stringify(this.chart.drillFields))
-        }
-      }
-
-      let field = {}
-      if (this.chart.drill) {
-        field = drillFields[this.chart.drillFilters.length]
-        // check click field is drill?
-        if (field.dataeaseName !== meta.valueField) {
-          return
-        }
-      } else {
-        if (meta.colIndex < xAxis.length) {
-          field = xAxis[meta.colIndex]
-        }
-      }
-
+      const nameIdMap = this.chart.data.fields.reduce((pre, next) => {
+        pre[next['dataeaseName']] = next['id']
+        return pre
+      }, {})
+      const rowData = this.chart.data.tableRow[meta.rowIndex]
       const dimensionList = []
-      dimensionList.push({ id: field.id, value: meta.fieldValue })
+      for (const key in rowData) {
+        dimensionList.push({ id: nameIdMap[key], value: rowData[key] })
+      }
       this.pointParam = {
         data: {
-          dimensionList: dimensionList
+          dimensionList: dimensionList,
+          quotaList: [],
+          name: meta.fieldValue
         }
       }
-      console.log(this.pointParam, 'pointParam')
 
       if (this.trackMenu.length < 2) { // 只有一个事件直接调用
         this.trackClick(this.trackMenu[0])
@@ -285,12 +282,14 @@ export default {
       }
       const linkageParam = {
         option: 'linkage',
+        name: this.pointParam.data.name,
         viewId: this.chart.id,
         dimensionList: this.pointParam.data.dimensionList,
         quotaList: this.pointParam.data.quotaList
       }
       const jumpParam = {
         option: 'jump',
+        name: this.pointParam.data.name,
         viewId: this.chart.id,
         dimensionList: this.pointParam.data.dimensionList,
         quotaList: this.pointParam.data.quotaList
@@ -324,6 +323,10 @@ export default {
           if (this.$refs.title) {
             this.$refs.title.style.fontSize = customStyle.text.fontSize + 'px'
           }
+
+          this.title_class.fontFamily = customStyle.text.fontFamily ? customStyle.text.fontFamily : DEFAULT_TITLE_STYLE.fontFamily
+          this.title_class.letterSpacing = (customStyle.text.letterSpace ? customStyle.text.letterSpace : DEFAULT_TITLE_STYLE.letterSpace) + 'px'
+          this.title_class.textShadow = customStyle.text.fontShadow ? '2px 2px 4px' : 'none'
         }
         if (customStyle.background) {
           this.title_class.background = hexColorToRGBA(customStyle.background.color, customStyle.background.alpha)
@@ -332,6 +335,7 @@ export default {
           this.container_bg_class.background = hexColorToRGBA(customStyle.background.color, customStyle.background.alpha)
         }
       }
+      this.initRemark()
     },
 
     calcHeightRightNow() {
@@ -371,6 +375,37 @@ export default {
         pageSize: 20,
         show: 0
       }
+    },
+
+    initScroll() {
+      clearInterval(this.scrollTimer)
+      // 首先回到最顶部，然后计算行高*行数作为top，最后判断：如果top<数据量*行高，继续滚动，否则回到顶部
+      const customAttr = JSON.parse(this.chart.customAttr)
+      const senior = JSON.parse(this.chart.senior)
+
+      this.scrollTop = 0
+      this.myChart.store.set('scrollY', this.scrollTop)
+      this.myChart.render()
+
+      if (senior && senior.scrollCfg && senior.scrollCfg.open && (this.chart.type === 'table-normal' || (this.chart.type === 'table-info' && !this.showPage))) {
+        const rowHeight = customAttr.size.tableItemHeight
+        const headerHeight = customAttr.size.tableTitleHeight
+
+        this.scrollTimer = setInterval(() => {
+          const top = rowHeight * senior.scrollCfg.row
+          const dom = document.getElementById(this.chartId)
+          if ((dom.offsetHeight - headerHeight + this.scrollTop) < rowHeight * this.chart.data.tableRow.length) {
+            this.scrollTop += top
+          } else {
+            this.scrollTop = 0
+          }
+          this.myChart.store.set('scrollY', this.scrollTop)
+          this.myChart.render()
+        }, senior.scrollCfg.interval)
+      }
+    },
+    initRemark() {
+      this.remarkCfg = getRemark(this.chart)
     }
   }
 }
@@ -380,11 +415,17 @@ export default {
 .table-dom-info{
   height:calc(100% - 36px);
 }
+.table-dom-info-pull{
+  height:calc(100%);
+}
 .table-dom-normal{
   height:100%;
 }
 .table-dom-info-drill{
   height:calc(100% - 36px - 12px);
+}
+.table-dom-info-drill-pull{
+  height:calc(100% - 12px);
 }
 .table-dom-normal-drill{
   height:calc(100% - 12px);
@@ -408,5 +449,11 @@ export default {
 }
 .page-style >>> .el-input__inner{
   height: 24px;
+}
+.page-style >>> button{
+  background: transparent!important;
+}
+.page-style >>> li{
+  background: transparent!important;
 }
 </style>

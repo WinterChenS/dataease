@@ -3,13 +3,24 @@
     <el-row>
       <span class="header-title">{{ $t('panel.share_in') }}</span>
       <div class="block" style="margin-top:8px;">
-        <el-tree ref="topTree" :data="datas" :props="defaultProps" :highlight-current="true" node-key="name" :default-expanded-keys="expandNodes" @node-click="handleNodeClick">
+        <el-tree
+          ref="topTree"
+          :data="datas"
+          :props="defaultProps"
+          :highlight-current="true"
+          node-key="name"
+          :default-expanded-keys="expandNodes"
+          @node-click="handleNodeClick"
+        >
           <span slot-scope="{ data }" class="custom-tree-node father">
             <span style="display: flex; flex: 1 1 0%; width: 0px;" :class="!!data.msgNode ? 'msg-node-class': ''">
               <span v-if="!!data.id">
-                <svg-icon icon-class="panel" class="ds-icon-scene" />
+                <svg-icon :icon-class="'panel-'+data.status" class="ds-icon-scene" />
               </span>
-              <span style="margin-left: 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ data.name }}</span>
+              <span
+                :class="data.status"
+                style="margin-left: 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+              >{{ data.name }}</span>
             </span>
 
           </span>
@@ -20,13 +31,23 @@
     <el-row>
       <span class="header-title">{{ $t('panel.share_out') }}</span>
       <div class="block" style="margin-top:8px;">
-        <el-tree ref="botTree" :data="outDatas" :props="defaultProps" :highlight-current="true" node-key="name" :default-expand-all="true">
+        <el-tree
+          ref="botTree"
+          :data="outDatas"
+          :props="defaultProps"
+          :highlight-current="true"
+          node-key="name"
+          :default-expand-all="true"
+        >
           <span slot-scope="{ data }" class="custom-tree-node father">
             <span style="display: flex; flex: 1 1 0%; width: 0px;" @click="viewMyShare(data)">
               <span v-if="!!data.id">
-                <svg-icon icon-class="panel" class="ds-icon-scene" />
+                <svg-icon :icon-class="'panel-'+data.status" class="ds-icon-scene" />
               </span>
-              <span style="margin-left: 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ data.name }}</span>
+              <span
+                :class="data.status"
+                style="margin-left: 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+              >{{ data.name }}</span>
             </span>
 
             <span class="child">
@@ -48,11 +69,12 @@
 </template>
 
 <script>
-import { loadTree, loadShareOutTree, removeShares } from '@/api/panel/share'
+import { loadTree, loadShareOutTree, removePanelShares } from '@/api/panel/share'
 import { uuid } from 'vue-uuid'
 import { initPanelData } from '@/api/panel/panel'
 import { proxyInitPanelData } from '@/api/panel/shareProxy'
 import bus from '@/utils/bus'
+
 export default {
   name: 'ShareTree',
   props: {
@@ -78,12 +100,7 @@ export default {
     }
   },
   created() {
-    bus.$on('refresh-my-share-out', () => {
-      this.initOutData().then(res => {
-        this.outDatas = res.data
-        this.setMainNull()
-      })
-    })
+    bus.$on('refresh-my-share-out', this.refreshMyShareOut)
     this.initData().then(res => {
       this.datas = res.data
       if (this.msgPanelIds && this.msgPanelIds.length > 0) {
@@ -94,8 +111,16 @@ export default {
       this.outDatas = res.data
     })
   },
-
+  beforeDestroy() {
+    bus.$off('refresh-my-share-out', this.refreshMyShareOut)
+  },
   methods: {
+    refreshMyShareOut() {
+      this.initOutData().then(res => {
+        this.outDatas = res.data
+        this.setMainNull()
+      })
+    },
     initData() {
       const param = {}
       return loadTree(param)
@@ -110,6 +135,7 @@ export default {
       const param = { userId: data.userId }
       proxyInitPanelData(data.id, param, function() {
         bus.$emit('set-panel-show-type', 1)
+        bus.$emit('set-panel-share-user', data.userId)
       })
       this.$refs['botTree'].setCurrentKey(null)
     },
@@ -129,7 +155,6 @@ export default {
       return data
     },
     expandMsgNode(panelIds) {
-      // console.log(panelIds)
       this.$nextTick(() => {
         this.getMsgNodes(panelIds)
       })
@@ -147,16 +172,12 @@ export default {
       })
     },
     removeCurrent(node) {
-      const param = {
-        panelId: node.id
-      }
-
       this.$confirm(this.$t('panel.remove_share_confirm'), '', {
         confirmButtonText: this.$t('commons.confirm'),
         cancelButtonText: this.$t('commons.cancel'),
         type: 'warning'
       }).then(() => {
-        removeShares(param).then(res => {
+        removePanelShares(node.id).then(res => {
           this.panelInfo && this.panelInfo.id && node.id === this.panelInfo.id && this.setMainNull()
           this.initOutData().then(res => {
             this.outDatas = res.data
@@ -179,7 +200,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.header-title {
+  .header-title {
     font-size: 14px;
     flex: 1;
     color: var(--TextPrimary, #606266);
@@ -188,19 +209,22 @@ export default {
     height: 100%;
     /*line-height: 36px;*/
   }
-.msg-node-class {
-  color: red;
-  >>> i{
+
+  .msg-node-class {
     color: red;
+
+    > > > i {
+      color: red;
+    }
   }
-}
- .custom-tree-node {
+
+  .custom-tree-node {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
     font-size: 14px;
-    padding-right:8px;
+    padding-right: 8px;
   }
 
   .custom-tree-node-list {
@@ -209,14 +233,24 @@ export default {
     align-items: center;
     justify-content: space-between;
     font-size: 14px;
-    padding:0 8px;
+    padding: 0 8px;
   }
+
   .father .child {
     /*display: none;*/
     visibility: hidden;
   }
+
   .father:hover .child {
     /*display: inline;*/
     visibility: visible;
   }
+
+  .unpublished {
+    color: #b2b2b2
+  }
+
+  .publish {
+  }
+
 </style>

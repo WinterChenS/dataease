@@ -1,5 +1,8 @@
 import { TableSheet, S2Event, PivotSheet } from '@antv/s2'
 import { getCustomTheme, getSize } from '@/views/chart/chart/common/common_table'
+import { DEFAULT_COLOR_CASE, DEFAULT_TOTAL } from '@/views/chart/chart/chart'
+import { formatterItem, valueFormatter } from '@/views/chart/chart/formatter'
+import { hexColorToRGBA } from '@/views/chart/chart/util'
 
 export function baseTableInfo(s2, container, chart, action, tableData) {
   const containerDom = document.getElementById(container)
@@ -48,20 +51,60 @@ export function baseTableInfo(s2, container, chart, action, tableData) {
             name: drillField.name
           })
         } else {
+          const f = getCurrentField(chart.xaxis, ele)
           columns.push(ele.dataeaseName)
           meta.push({
             field: ele.dataeaseName,
-            name: ele.name
+            name: ele.name,
+            formatter: function(value) {
+              if (!f) {
+                return value
+              }
+              if (value === null || value === undefined) {
+                return value
+              }
+              if (f.groupType === 'd') {
+                return value
+              } else {
+                if (f.formatterCfg) {
+                  const v = valueFormatter(value, f.formatterCfg)
+                  return v.includes('NaN') ? value : v
+                } else {
+                  const v = valueFormatter(value, formatterItem)
+                  return v.includes('NaN') ? value : v
+                }
+              }
+            }
           })
         }
       }
     })
   } else {
     fields.forEach(ele => {
+      const f = getCurrentField(chart.xaxis, ele)
       columns.push(ele.dataeaseName)
       meta.push({
         field: ele.dataeaseName,
-        name: ele.name
+        name: ele.name,
+        formatter: function(value) {
+          if (!f) {
+            return value
+          }
+          if (value === null || value === undefined) {
+            return value
+          }
+          if (f.groupType === 'd') {
+            return value
+          } else {
+            if (f.formatterCfg) {
+              const v = valueFormatter(value, f.formatterCfg)
+              return v.includes('NaN') ? value : v
+            } else {
+              const v = valueFormatter(value, formatterItem)
+              return v.includes('NaN') ? value : v
+            }
+          }
+        }
       })
     })
   }
@@ -80,7 +123,8 @@ export function baseTableInfo(s2, container, chart, action, tableData) {
     width: containerDom.offsetWidth,
     height: containerDom.offsetHeight,
     // showSeriesNumber: true
-    style: getSize(chart)
+    style: getSize(chart),
+    conditions: getConditions(chart)
   }
 
   // 开始渲染
@@ -145,20 +189,48 @@ export function baseTableNormal(s2, container, chart, action, tableData) {
             name: drillField.name
           })
         } else {
+          const f = getCurrentField(chart.yaxis, ele)
           columns.push(ele.dataeaseName)
           meta.push({
             field: ele.dataeaseName,
-            name: ele.name
+            name: ele.name,
+            formatter: function(value) {
+              if (!f) {
+                return value
+              }
+              if (value === null || value === undefined) {
+                return value
+              }
+              if (f.formatterCfg) {
+                return valueFormatter(value, f.formatterCfg)
+              } else {
+                return valueFormatter(value, formatterItem)
+              }
+            }
           })
         }
       }
     })
   } else {
     fields.forEach(ele => {
+      const f = getCurrentField(chart.yaxis, ele)
       columns.push(ele.dataeaseName)
       meta.push({
         field: ele.dataeaseName,
-        name: ele.name
+        name: ele.name,
+        formatter: function(value) {
+          if (!f) {
+            return value
+          }
+          if (value === null || value === undefined) {
+            return value
+          }
+          if (f.formatterCfg) {
+            return valueFormatter(value, f.formatterCfg)
+          } else {
+            return valueFormatter(value, formatterItem)
+          }
+        }
       })
     })
   }
@@ -177,7 +249,8 @@ export function baseTableNormal(s2, container, chart, action, tableData) {
     width: containerDom.offsetWidth,
     height: containerDom.offsetHeight,
     // showSeriesNumber: true
-    style: getSize(chart)
+    style: getSize(chart),
+    conditions: getConditions(chart)
   }
 
   // 开始渲染
@@ -252,20 +325,48 @@ export function baseTablePivot(s2, container, chart, action, tableData) {
             name: drillField.name
           })
         } else {
+          const f = getCurrentField(chart.yaxis, ele)
           columns.push(ele.dataeaseName)
           meta.push({
             field: ele.dataeaseName,
-            name: ele.name
+            name: ele.name,
+            formatter: function(value) {
+              if (!f) {
+                return value
+              }
+              if (value === null || value === undefined) {
+                return value
+              }
+              if (f.formatterCfg) {
+                return valueFormatter(value, f.formatterCfg)
+              } else {
+                return valueFormatter(value, formatterItem)
+              }
+            }
           })
         }
       }
     })
   } else {
     fields.forEach(ele => {
+      const f = getCurrentField(chart.yaxis, ele)
       columns.push(ele.dataeaseName)
       meta.push({
         field: ele.dataeaseName,
-        name: ele.name
+        name: ele.name,
+        formatter: function(value) {
+          if (!f) {
+            return value
+          }
+          if (value === null || value === undefined) {
+            return value
+          }
+          if (f.formatterCfg) {
+            return valueFormatter(value, f.formatterCfg)
+          } else {
+            return valueFormatter(value, formatterItem)
+          }
+        }
       })
     })
   }
@@ -281,11 +382,32 @@ export function baseTablePivot(s2, container, chart, action, tableData) {
     data: tableData
   }
 
+  // total config
+  let totalCfg = {}
+  const chartObj = JSON.parse(JSON.stringify(chart))
+  if (chartObj.customAttr) {
+    let customAttr = null
+    if (Object.prototype.toString.call(chartObj.customAttr) === '[object Object]') {
+      customAttr = JSON.parse(JSON.stringify(chartObj.customAttr))
+    } else {
+      customAttr = JSON.parse(chartObj.customAttr)
+    }
+    if (customAttr.totalCfg) {
+      totalCfg = customAttr.totalCfg
+    } else {
+      totalCfg = JSON.parse(JSON.stringify(DEFAULT_TOTAL))
+    }
+  }
+  totalCfg.row.subTotalsDimensions = r
+  totalCfg.col.subTotalsDimensions = c
+
   // options
   const s2Options = {
     width: containerDom.offsetWidth,
     height: containerDom.offsetHeight,
-    style: getSize(chart)
+    style: getSize(chart),
+    totals: totalCfg,
+    conditions: getConditions(chart)
   }
 
   // 开始渲染
@@ -302,4 +424,202 @@ export function baseTablePivot(s2, container, chart, action, tableData) {
   s2.setThemeCfg({ theme: customTheme })
 
   return s2
+}
+
+function getCurrentField(valueFieldList, field) {
+  let list = []
+  let res = null
+  try {
+    list = JSON.parse(valueFieldList)
+  } catch (err) {
+    list = JSON.parse(JSON.stringify(valueFieldList))
+  }
+  if (list) {
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i]
+      if (field.dataeaseName === f.dataeaseName) {
+        res = f
+        break
+      }
+    }
+  }
+
+  return res
+}
+
+function getConditions(chart) {
+  const res = {
+    text: [],
+    background: []
+  }
+  let conditions
+  try {
+    const senior = JSON.parse(chart.senior)
+    conditions = senior.threshold ? senior.threshold.tableThreshold : null
+  } catch (err) {
+    const senior = JSON.parse(JSON.stringify(chart.senior))
+    conditions = senior.threshold ? senior.threshold.tableThreshold : null
+  }
+
+  if (conditions && conditions.length > 0) {
+    // table item color
+    let valueColor = DEFAULT_COLOR_CASE.tableFontColor
+    let valueBgColor = DEFAULT_COLOR_CASE.tableItemBgColor
+    if (chart.customAttr) {
+      const customAttr = JSON.parse(chart.customAttr)
+      // color
+      if (customAttr.color) {
+        const c = JSON.parse(JSON.stringify(customAttr.color))
+        valueColor = c.tableFontColor
+        valueBgColor = hexColorToRGBA(c.tableItemBgColor, c.alpha)
+      }
+    }
+
+    for (let i = 0; i < conditions.length; i++) {
+      const field = conditions[i]
+      res.text.push({
+        field: field.field.dataeaseName,
+        mapping(value) {
+          return {
+            fill: mappingColor(value, valueColor, field, 'color')
+          }
+        }
+      })
+      res.background.push({
+        field: field.field.dataeaseName,
+        mapping(value) {
+          return {
+            fill: mappingColor(value, valueBgColor, field, 'backgroundColor')
+          }
+        }
+      })
+    }
+  }
+  return res
+}
+
+function mappingColor(value, defaultColor, field, type) {
+  let color
+  for (let i = 0; i < field.conditions.length; i++) {
+    let flag = false
+    const t = field.conditions[i]
+    if (field.field.deType === 2 || field.field.deType === 3 || field.field.deType === 4) {
+      const tv = parseFloat(t.value)
+      if (t.term === 'eq') {
+        if (value === tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'not_eq') {
+        if (value !== tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'lt') {
+        if (value < tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'gt') {
+        if (value > tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'le') {
+        if (value <= tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'ge') {
+        if (value >= tv) {
+          color = t[type]
+          flag = true
+        }
+      }
+      if (flag) {
+        break
+      } else if (i === field.conditions.length - 1) {
+        color = defaultColor
+      }
+    } else if (field.field.deType === 0 || field.field.deType === 5) {
+      const tv = t.value
+      if (t.term === 'eq') {
+        if (value === tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'not_eq') {
+        if (value !== tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'like') {
+        if (value.includes(tv)) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'not like') {
+        if (!value.includes(tv)) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'null') {
+        if (value === null || value === undefined || value === '') {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'not_null') {
+        if (value !== null && value !== undefined && value !== '') {
+          color = t[type]
+          flag = true
+        }
+      }
+      if (flag) {
+        break
+      } else if (i === field.conditions.length - 1) {
+        color = defaultColor
+      }
+    } else {
+      // time
+      const tv = new Date(t.value + ' GMT+8').getTime()
+      const v = new Date(value + ' GMT+8').getTime()
+      if (t.term === 'eq') {
+        if (v === tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'not_eq') {
+        if (v !== tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'lt') {
+        if (v < tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'gt') {
+        if (v > tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'le') {
+        if (v <= tv) {
+          color = t[type]
+          flag = true
+        }
+      } else if (t.term === 'ge') {
+        if (v >= tv) {
+          color = t[type]
+          flag = true
+        }
+      }
+      if (flag) {
+        break
+      } else if (i === field.conditions.length - 1) {
+        color = defaultColor
+      }
+    }
+  }
+  return color
 }

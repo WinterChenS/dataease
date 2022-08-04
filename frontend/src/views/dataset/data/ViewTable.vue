@@ -4,6 +4,9 @@
       <span class="title-text" style="line-height: 26px;">
         {{ table.name }}
       </span>
+      <span v-if="sycnStatus === 'Underway'" class="blue-color" style="line-height: 26px;">
+        {{ $t('dataset.dataset_sync') }}
+      </span>
       <el-popover
         placement="right-start"
         width="400"
@@ -13,10 +16,20 @@
       >
         <dataset-chart-detail type="dataset" :data="table" :tab-status="tabStatus" />
         <!--        <svg-icon slot="reference" class="title-text" icon-class="more_v" style="cursor: pointer;" />-->
-        <i slot="reference" class="el-icon-warning icon-class" style="margin-left: 4px;cursor: pointer;font-size: 14px;" />
+        <i
+          slot="reference"
+          class="el-icon-warning icon-class"
+          style="margin-left: 4px;cursor: pointer;font-size: 14px;"
+        />
       </el-popover>
       <el-row v-if="hasDataPermission('manage',param.privileges)" style="float: right">
-        <el-dropdown v-if="table.type ==='excel'" style="margin-right: 10px;" size="small" trigger="click" @command="clickEditExcel">
+        <el-dropdown
+          v-if="table.type ==='excel'"
+          style="margin-right: 10px;"
+          size="small"
+          trigger="click"
+          @command="clickEditExcel"
+        >
           <el-button size="mini">
             {{ $t('dataset.edit_excel') }}
           </el-button>
@@ -44,22 +57,58 @@
 
     <el-tabs v-model="tabActive" @tab-click="tabClick">
       <el-tab-pane :label="$t('dataset.data_preview')" name="dataPreview">
-        <tab-data-preview :param="param" :table="table" :fields="fields" :data="data" :page="page" :form="tableViewRowForm" @reSearch="reSearch" />
+        <tab-data-preview
+          :param="param"
+          :table="table"
+          :fields="fields"
+          :data="data"
+          :page="page"
+          :form="tableViewRowForm"
+          @reSearch="reSearch"
+        />
       </el-tab-pane>
-      <el-tab-pane :label="$t('dataset.field_manage')" name="fieldEdit">
-        <field-edit :param="param" :table="table" />
+      <el-tab-pane :label="$t('dataset.field_manage')" :lazy="true" name="fieldEdit">
+        <field-edit v-if="tabActive === 'fieldEdit'" :param="param" :table="table" />
       </el-tab-pane>
-      <el-tab-pane v-if="!hideCustomDs && table.type !== 'union' && table.type !== 'custom' && !(table.type === 'sql' && table.mode === 0)" :label="$t('dataset.join_view')" name="joinView">
+      <el-tab-pane
+        v-if="!hideCustomDs && table.type !== 'union' && table.type !== 'custom' && !(table.type === 'sql' && table.mode === 0)"
+        :label="$t('dataset.join_view')"
+        name="joinView"
+      >
         <union-view :param="param" :table="table" />
       </el-tab-pane>
-      <el-tab-pane v-if="table.mode === 1 && (table.type === 'excel' || table.type === 'db' || table.type === 'sql' || table.type === 'api')" :label="$t('dataset.update_info')" name="updateInfo">
+      <el-tab-pane
+        v-if="table.mode === 1 && (table.type === 'excel' || table.type === 'db' || table.type === 'sql' || table.type === 'api')"
+        :label="$t('dataset.update_info')"
+        name="updateInfo"
+      >
         <update-info v-if="tabActive=='updateInfo'" :param="param" :table="table" />
       </el-tab-pane>
-      <el-tab-pane v-if="isPluginLoaded && hasDataPermission('manage',param.privileges)" :lazy="true" :label="$t('dataset.row_permissions')" name="rowPermissions">
-        <plugin-com v-if="isPluginLoaded && tabActive=='rowPermissions'" ref="RowPermissions" component-name="RowPermissions" :obj="table" />
+      <el-tab-pane
+        v-if="isPluginLoaded && hasDataPermission('manage',param.privileges)"
+        :lazy="true"
+        :label="$t('dataset.row_permissions')"
+        name="rowPermissions"
+      >
+        <plugin-com
+          v-if="isPluginLoaded && tabActive=='rowPermissions'"
+          ref="RowPermissions"
+          component-name="RowPermissions"
+          :obj="table"
+        />
       </el-tab-pane>
-      <el-tab-pane v-if="isPluginLoaded && hasDataPermission('manage',param.privileges)" :lazy="true" :label="$t('dataset.column_permissions')" name="columnPermissions">
-        <plugin-com v-if="isPluginLoaded && tabActive=='columnPermissions'" ref="ColumnPermissions" component-name="ColumnPermissions" :obj="table" />
+      <el-tab-pane
+        v-if="isPluginLoaded && hasDataPermission('manage',param.privileges)"
+        :lazy="true"
+        :label="$t('dataset.column_permissions')"
+        name="columnPermissions"
+      >
+        <plugin-com
+          v-if="isPluginLoaded && tabActive=='columnPermissions'"
+          ref="ColumnPermissions"
+          component-name="ColumnPermissions"
+          :obj="table"
+        />
       </el-tab-pane>
     </el-tabs>
   </el-row>
@@ -91,6 +140,8 @@ export default {
       },
       fields: [],
       data: [],
+      sycnStatus: '',
+      lastRequestComplete: true,
       page: {
         page: 1,
         pageSize: 1000,
@@ -121,7 +172,20 @@ export default {
     })
   },
   created() {
-
+    this.taskLogTimer = setInterval(() => {
+      if (this.sycnStatus !== 'Underway') {
+        return;
+      }
+      if (!this.lastRequestComplete) {
+        return
+      } else {
+        this.lastRequestComplete = false
+      }
+      this.initPreviewData(this.page)
+    }, 5000)
+  },
+  beforeDestroy() {
+    clearInterval(this.taskLogTimer)
   },
   mounted() {
     this.initTable(this.param.id)
@@ -149,13 +213,16 @@ export default {
           this.fields = response.data.fields
           this.data = response.data.data
           this.page = response.data.page
+          this.sycnStatus = response.data.sycnStatus
           if (response.data.status === 'warnning') {
             this.$warning(response.data.msg, 3000)
           }
           if (response.data.status === 'error') {
             this.$error(response.data.msg, 3000)
           }
+          this.lastRequestComplete = true
         }).catch(response => {
+          this.lastRequestComplete = true
           this.fields = []
           this.data = []
           this.page = {
@@ -172,13 +239,22 @@ export default {
     },
 
     editSql() {
-      this.$emit('switchComponent', { name: 'AddSQL', param: { id: this.table.sceneId, tableId: this.table.id, table: this.table }})
+      this.$emit('switchComponent', {
+        name: 'AddSQL',
+        param: { id: this.table.sceneId, tableId: this.table.id, table: this.table }
+      })
     },
     editCustom() {
-      this.$emit('switchComponent', { name: 'AddCustom', param: { id: this.table.sceneId, tableId: this.table.id, table: this.table }})
+      this.$emit('switchComponent', {
+        name: 'AddCustom',
+        param: { id: this.table.sceneId, tableId: this.table.id, table: this.table }
+      })
     },
     editUnion() {
-      this.$emit('switchComponent', { name: 'AddUnion', param: { id: this.table.sceneId, tableId: this.table.id, table: this.table }})
+      this.$emit('switchComponent', {
+        name: 'AddUnion',
+        param: { id: this.table.sceneId, tableId: this.table.id, table: this.table }
+      })
     },
 
     reSearch(val) {
@@ -194,13 +270,18 @@ export default {
     },
 
     clickEditExcel(param) {
-      // console.log(param);
       switch (param.type) {
         case '0':
-          this.$emit('switchComponent', { name: 'AddExcel', param: { id: this.table.sceneId, tableId: this.table.id, editType: 0, table: this.table }})
+          this.$emit('switchComponent', {
+            name: 'AddExcel',
+            param: { id: this.table.sceneId, tableId: this.table.id, editType: 0, table: this.table }
+          })
           break
         case '1':
-          this.$emit('switchComponent', { name: 'AddExcel', param: { id: this.table.sceneId, tableId: this.table.id, editType: 1, table: this.table }})
+          this.$emit('switchComponent', {
+            name: 'AddExcel',
+            param: { id: this.table.sceneId, tableId: this.table.id, editType: 1, table: this.table }
+          })
           break
       }
     },
@@ -225,7 +306,11 @@ export default {
 
     tabClick() {
       if (this.tabActive === 'dataPreview') {
-        this.initTable(this.param.id)
+        const reload = localStorage.getItem('reloadDsData')
+        if (reload === 'true') {
+          localStorage.setItem('reloadDsData', 'false')
+          this.initTable(this.param.id)
+        }
       }
     }
   }
@@ -233,17 +318,19 @@ export default {
 </script>
 
 <style scoped>
-  .el-divider--horizontal {
-    margin: 12px 0;
-  }
+.el-divider--horizontal {
+  margin: 12px 0;
+}
 
-  .form-item {
-    margin-bottom: 6px;
-  }
-  .icon-class{
-    color:#6c6c6c;
-  }
-  .blackTheme .icon-class{
-    color: #cccccc;
-  }
+.form-item {
+  margin-bottom: 6px;
+}
+
+.icon-class {
+  color: #6c6c6c;
+}
+
+.blackTheme .icon-class {
+  color: #cccccc;
+}
 </style>

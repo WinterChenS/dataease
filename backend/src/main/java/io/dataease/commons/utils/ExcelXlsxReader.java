@@ -1,7 +1,7 @@
 package io.dataease.commons.utils;
-import io.dataease.dto.datasource.TableField;
 import io.dataease.dto.dataset.ExcelSheetData;
 import io.dataease.i18n.Translator;
+import io.dataease.plugins.common.dto.datasource.TableField;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -33,7 +33,7 @@ import java.util.*;
 public class ExcelXlsxReader extends DefaultHandler {
 
     /**
-     * 自定义获取表格某些信息
+     * 自定义获取表格某些信
      */
     public Map map = new TreeMap<String,String>();
     /**
@@ -100,6 +100,8 @@ public class ExcelXlsxReader extends DefaultHandler {
      */
     private String formatString;
 
+
+
     //定义前一个元素和当前元素的位置，用来计算其中空的单元格数量，如A6和A8等
     private String preRef = null, ref = null;
 
@@ -119,6 +121,15 @@ public class ExcelXlsxReader extends DefaultHandler {
      */
     private boolean isDateFormat = false;
 
+    public Integer getObtainedNum() {
+        return obtainedNum;
+    }
+
+    public void setObtainedNum(Integer obtainedNum) {
+        this.obtainedNum = obtainedNum;
+    }
+
+    private Integer obtainedNum = null;
 
     public List<TableField> getFields() {
         return fields;
@@ -179,7 +190,7 @@ public class ExcelXlsxReader extends DefaultHandler {
      */
     @Override
     public void startElement(String uri, String localName, String name, Attributes attributes) throws SAXException {
-        if(curRow>101){
+        if(this.obtainedNum !=null && curRow>this.obtainedNum){
             return;
         }
 
@@ -217,7 +228,7 @@ public class ExcelXlsxReader extends DefaultHandler {
      */
     @Override
     public void characters(char[] ch, int start, int length) throws SAXException {
-        if(curRow>101){
+        if(this.obtainedNum !=null && curRow>this.obtainedNum){
             return;
         }
         lastIndex += new String(ch, start, length);
@@ -233,7 +244,7 @@ public class ExcelXlsxReader extends DefaultHandler {
      */
     @Override
     public void endElement(String uri, String localName, String name) throws SAXException {
-        if(curRow>101){
+        if(this.obtainedNum !=null && curRow>this.obtainedNum){
             return;
         }
         //t元素也包含字符串
@@ -299,6 +310,9 @@ public class ExcelXlsxReader extends DefaultHandler {
                     maxRef = ref;
                 }
                 if(curRow>1){
+                    for (int i=cellList.size();i<this.fields.size();i++){
+                        cellList.add("");
+                    }
                     List<String> tmp = new ArrayList<>(cellList);
                     this.getData().add(tmp);
                 }

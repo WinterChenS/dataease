@@ -1,5 +1,6 @@
 <template>
-  <span>
+  <span style="position: relative;display: inline-block;">
+    <i class="el-icon-arrow-down el-icon-delete" style="position: absolute;top: 6px;right: 24px;color: #878d9f;cursor: pointer;z-index: 1;" @click="removeItem" />
     <el-dropdown trigger="click" size="mini" @command="clickItem">
       <span class="el-dropdown-link">
         <el-tag size="small" class="item-axis" :type="tagType">
@@ -10,10 +11,11 @@
             <svg-icon v-if="item.deType === 5" icon-class="field_location" class="field-icon-location" />
             <svg-icon v-if="item.sort === 'asc'" icon-class="sort-asc" class-name="field-icon-sort" />
             <svg-icon v-if="item.sort === 'desc'" icon-class="sort-desc" class-name="field-icon-sort" />
+            <svg-icon v-if="item.sort === 'custom_sort'" icon-class="custom_sort" class-name="field-icon-sort" />
           </span>
           <span class="item-span-style" :title="item.name">{{ item.name }}</span>
           <field-error-tips v-if="tagType === 'danger'" />
-          <span v-if="item.deType === 1" class="summary-span">
+          <span v-if="false && item.deType === 1" class="summary-span">
             {{ $t('chart.' + item.dateStyle) }}
           </span>
           <i class="el-icon-arrow-down el-icon--right" style="position: absolute;top: 6px;right: 10px;" />
@@ -33,13 +35,10 @@
                 <el-dropdown-item :command="beforeSort('none')">{{ $t('chart.none') }}</el-dropdown-item>
                 <el-dropdown-item :command="beforeSort('asc')">{{ $t('chart.asc') }}</el-dropdown-item>
                 <el-dropdown-item :command="beforeSort('desc')">{{ $t('chart.desc') }}</el-dropdown-item>
+                <el-dropdown-item v-show="item.deType === 0 || item.deType === 5" :command="beforeSort('custom_sort')">{{ $t('chart.custom_sort') }}...</el-dropdown-item>
               </el-dropdown-menu>
             </el-dropdown>
           </el-dropdown-item>
-          <!--          <el-dropdown-item icon="el-icon-files" :command="beforeClickItem('filter')">-->
-          <!--            <span>{{ $t('chart.filter') }}...</span>-->
-          <!--          </el-dropdown-item>-->
-
           <el-dropdown-item v-show="item.deType === 1" divided>
             <el-dropdown placement="right-start" size="mini" style="width: 100%" @command="dateStyle">
               <span class="el-dropdown-link inner-dropdown-menu">
@@ -77,6 +76,9 @@
             </el-dropdown>
           </el-dropdown-item>
 
+          <el-dropdown-item v-if="chart.render === 'antv' && chart.type.includes('table') && item.groupType === 'q'" icon="el-icon-notebook-2" divided :command="beforeClickItem('formatter')">
+            <span>{{ $t('chart.value_formatter') }}...</span>
+          </el-dropdown-item>
           <el-dropdown-item icon="el-icon-edit-outline" divided :command="beforeClickItem('rename')">
             <span>{{ $t('chart.show_name_set') }}</span>
           </el-dropdown-item>
@@ -90,8 +92,10 @@
 </template>
 
 <script>
-import { getItemType } from '@/views/chart/components/drag-item/utils'
+import { getItemType, getOriginFieldName } from '@/views/chart/components/drag-item/utils'
 import FieldErrorTips from '@/views/chart/components/drag-item/components/FieldErrorTips'
+import bus from '@/utils/bus'
+import { formatterItem } from '@/views/chart/chart/formatter'
 
 export default {
   name: 'DimensionItem',
@@ -109,6 +113,10 @@ export default {
       type: Number,
       required: true
     },
+    chart: {
+      type: Object,
+      required: true
+    },
     dimensionData: {
       type: Array,
       required: true
@@ -120,7 +128,8 @@ export default {
   },
   data() {
     return {
-      tagType: getItemType(this.dimensionData, this.quotaData, this.item)
+      tagType: 'success',
+      formatterItem: formatterItem
     }
   },
   watch: {
@@ -132,8 +141,18 @@ export default {
     }
   },
   mounted() {
+    bus.$on('reset-change-table', this.getItemTagType)
+    this.init()
+  },
+  beforeDestroy() {
+    bus.$off('reset-change-table', this.getItemTagType)
   },
   methods: {
+    init() {
+      if (!this.item.formatterCfg) {
+        this.item.formatterCfg = JSON.parse(JSON.stringify(this.formatterItem))
+      }
+    },
     clickItem(param) {
       if (!param) {
         return
@@ -148,6 +167,9 @@ export default {
         case 'filter':
           this.editFilter()
           break
+        case 'formatter':
+          this.valueFormatter()
+          break
         default:
           break
       }
@@ -158,9 +180,18 @@ export default {
       }
     },
     sort(param) {
-      // console.log(param)
-      this.item.sort = param.type
-      this.$emit('onDimensionItemChange', this.item)
+      if (param.type === 'custom_sort') {
+        const item = {
+          index: this.index,
+          sort: param.type
+        }
+        this.$emit('onCustomSort', item)
+      } else {
+        this.item.index = this.index
+        this.item.sort = param.type
+        this.item.customSort = []
+        this.$emit('onDimensionItemChange', this.item)
+      }
     },
     beforeSort(type) {
       return {
@@ -168,7 +199,6 @@ export default {
       }
     },
     dateStyle(param) {
-      // console.log(param)
       this.item.dateStyle = param.type
       this.$emit('onDimensionItemChange', this.item)
     },
@@ -178,7 +208,6 @@ export default {
       }
     },
     datePattern(param) {
-      // console.log(param)
       this.item.datePattern = param.type
       this.$emit('onDimensionItemChange', this.item)
     },
@@ -194,6 +223,7 @@ export default {
     showRename() {
       this.item.index = this.index
       this.item.renameType = 'dimension'
+      this.item.dsFieldName = getOriginFieldName(this.dimensionData, this.quotaData, this.item)
       this.$emit('onNameEdit', this.item)
     },
     removeItem() {
@@ -203,6 +233,12 @@ export default {
     },
     getItemTagType() {
       this.tagType = getItemType(this.dimensionData, this.quotaData, this.item)
+    },
+
+    valueFormatter() {
+      this.item.index = this.index
+      this.item.formatterType = 'dimension'
+      this.$emit('valueFormatter', this.item)
     }
   }
 }
@@ -247,7 +283,7 @@ export default {
 
   .item-span-style{
     display: inline-block;
-    width: 70px;
+    width: 100px;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;

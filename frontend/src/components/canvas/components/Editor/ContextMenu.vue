@@ -30,7 +30,8 @@ export default {
       copyData: null,
       editFilter: [
         'view',
-        'custom'
+        'custom',
+        'custom-button'
       ]
     }
   },
@@ -50,15 +51,19 @@ export default {
       if (this.curComponent.type === 'view') {
         this.$store.dispatch('chart/setViewId', null)
         this.$store.dispatch('chart/setViewId', this.curComponent.propValue.viewId)
-        bus.$emit('PanelSwitchComponent', { name: 'ChartEdit', param: { 'id': this.curComponent.propValue.viewId, 'optType': 'edit' }})
+        bus.$emit('change_panel_right_draw', true)
       }
       if (this.curComponent.type === 'custom') {
         bus.$emit('component-dialog-edit')
       }
 
+      if (this.curComponent.type === 'custom-button') {
+        bus.$emit('button-dialog-edit')
+      }
+
       // 编辑样式组件
 
-      if (this.curComponent.type === 'v-text' || this.curComponent.type === 'rect-shape') {
+      if (this.curComponent.type === 'v-text' || this.curComponent.type === 'de-rich-text' || this.curComponent.type === 'rect-shape') {
         bus.$emit('component-dialog-style')
       }
     },
